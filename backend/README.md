@@ -18,16 +18,15 @@ npm install
 2. Create a `.env` file (already included) with:
 ```
 PORT=5000
-MONGO_URI=mongodb://localhost:27017/portfolio_app
-```
-Replace `MONGO_URI` with your MongoDB Atlas connection string if not running MongoDB locally.
+MONGO_URI=<your MongoDB Atlas connection string, set in Railway env vars>
+replace "MONGO_URI" with your mongoDB Atlas connection string if not running MongoDB locally.
 
 3. Run the server:
 ```bash
 npm run dev
 ```
 
-Runs on **http://localhost:5000**
+Runs on **railway**: https://task-manager-production-d03d.up.railway.app/
 
 ## API Endpoints
 
