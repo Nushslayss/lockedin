@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
-const API_URL = "http://localhost:5000/api/tasks";
+const API_URL = "/api/tasks";
 
 export default function Home() {
   const [tasks, setTasks] = useState([]);
