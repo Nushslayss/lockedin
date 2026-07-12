@@ -8,7 +8,7 @@ export default function Login() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    const res = await fetch("https://edging-flashcard-hypertext.ngrok-free.dev/api/auth/login", {
+    const res = await fetch("/api/backend/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
