@@ -13,10 +13,9 @@ npm install
 npm run dev
 ```
 
-Runs on **http://localhost:3000**
+Runs on **Railway**: https://focused-generosity-production-8080.up.railway.app
 
-> Note: the backend server must also be running (see `portfolio-backend` repo) for tasks to load, since this app fetches data from `http://localhost:5000/api/tasks`.
-
+> Note: backend is deployed separately on Railway at https://task-manager-production-d03d.up.railway.app
 ## Features
 - View all tasks
 - Add a new task (title + optional description)
