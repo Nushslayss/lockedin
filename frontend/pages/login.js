@@ -42,10 +42,16 @@ export default function Login() {
           className="w-full border p-2 mb-4 rounded"
           required
         />
-        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
-          Login
-        </button>
-      </form>
+        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-b...">
+  Login
+</button>
+<p className="mt-4 text-center text-sm">
+  Don't have an account?{" "}
+  <a href="/signup" className="text-blue-600 underline">
+    Sign up
+  </a>
+</p>
+</form>
     </div>
   );
 }
