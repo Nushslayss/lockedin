@@ -19,7 +19,7 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/portfolio_app";
+const MONGO_URI = "mongodb://nushslayss:nush2815@ac-v45xznh-shard-00-00.sfjzia0.mongodb.net:27017,ac-v45xznh-shard-00-01.sfjzia0.mongodb.net:27017,ac-v45xznh-shard-00-02.sfjzia0.mongodb.net:27017/?ssl=true&replicaSet=atlas-14ly3q-shard-0&authSource=admin&appName=Cluster0"
 
 mongoose
   .connect(MONGO_URI)
