@@ -17,9 +17,18 @@ export default function Home() {
   const fetchTasks = async () => {
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        router.push("/login");
+        return;
+      }
       const res = await fetch(`${API_URL}/api/tasks`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        router.push("/login");
+        return;
+      }
       if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
       setTasks(data);
@@ -41,6 +50,11 @@ export default function Home() {
         },
         body: JSON.stringify({ title, description }),
       });
+      if (res.status === 401) {
+        localStorage.removeItem("token");
+        router.push("/login");
+        return;
+      }
       if (!res.ok) throw new Error("Failed to add task");
       setTitle("");
       setDescription("");
@@ -93,3 +107,5 @@ export default function Home() {
     </div>
   );
 }
+
+  
