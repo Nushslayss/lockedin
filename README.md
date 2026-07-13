@@ -4,7 +4,7 @@ A full-stack Task Manager app for creating, tracking, and managing tasks — bui
 
 ## Live Demo
 
-- **Frontend:** https://focused-generosity-production-8080.up.railway.app
+- **Frontend:** https://divadone-8080.up.railway.app
 - **Backend API:** https://task-manager-production-d03d.up.railway.app
 
 ## Tech Stack
