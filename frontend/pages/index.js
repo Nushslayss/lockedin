@@ -1,3 +1,4 @@
+// INDEX.JSX - LOCKEDIN HOME/TASK MANAGER PAGE
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
@@ -222,7 +223,7 @@ export default function Home() {
       <div style={{...styles.navbar, ...(theme === "dark" ? styles.navbarDark : {})}}>
         <div style={styles.navContent}>
           <h1 style={styles.logo} className="sparkle-text">
-            ✨ Task Manager ✨
+            ✨ LockedIn ✨
           </h1>
           <div style={styles.navButtons}>
             <button style={{...styles.themeBtn, ...(theme === "dark" ? styles.themeBtnDark : {})}} onClick={toggleTheme}>
@@ -326,7 +327,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   containerDark: {
-    background: "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #c4b5fd 100%)",
+    background: "linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #e9d5ff 100%)",
   },
   modalOverlay: {
     position: "fixed",
@@ -364,8 +365,8 @@ const styles = {
     transition: "all 0.3s ease",
   },
   navbarDark: {
-    background: "linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%)",
-    boxShadow: "0 10px 30px rgba(139, 92, 246, 0.35)",
+    background: "linear-gradient(90deg, #c4b5fd 0%, #a78bfa 100%)",
+    boxShadow: "0 10px 30px rgba(168, 85, 247, 0.25)",
   },
   navContent: {
     maxWidth: "1000px",
@@ -396,9 +397,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   themeBtnDark: {
-    background: "rgba(255, 255, 255, 0.35)",
-    borderColor: "#5b21b6",
-    color: "#5b21b6",
+    background: "rgba(255, 255, 255, 0.3)",
+    borderColor: "#ffffff",
+    color: "#6b21a8",
   },
   logoutBtn: {
     background: "rgba(255, 255, 255, 0.2)",
@@ -412,9 +413,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   logoutBtnDark: {
-    background: "rgba(255, 255, 255, 0.35)",
-    borderColor: "#5b21b6",
-    color: "#5b21b6",
+    background: "rgba(255, 255, 255, 0.3)",
+    borderColor: "#ffffff",
+    color: "#6b21a8",
   },
   main: {
     maxWidth: "900px",
@@ -446,9 +447,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   formDark: {
-    background: "#f5f3ff",
-    border: "3px solid #a78bfa",
-    boxShadow: "0 10px 40px rgba(139, 92, 246, 0.2)",
+    background: "#faf5ff",
+    border: "3px solid #d8b4fe",
+    boxShadow: "0 10px 40px rgba(139, 92, 246, 0.15)",
   },
   inputGroup: {
     display: "flex",
@@ -476,9 +477,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   inputDark: {
-    border: "2px solid #c4b5fd",
-    backgroundColor: "#faf5ff",
-    color: "#4c1d95",
+    border: "2px solid #d8b4fe",
+    backgroundColor: "#f3e8ff",
+    color: "#6b21a8",
   },
   submitBtn: {
     width: "100%",
@@ -530,9 +531,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskCardDark: {
-    background: "#f5f3ff",
-    border: "2px solid #c4b5fd",
-    boxShadow: "0 5px 20px rgba(139, 92, 246, 0.2)",
+    background: "#faf5ff",
+    border: "2px solid #d8b4fe",
+    boxShadow: "0 5px 20px rgba(139, 92, 246, 0.15)",
   },
   taskContent: {
     flex: 1,
@@ -545,7 +546,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskTitleDark: {
-    color: "#6d28d9",
+    color: "#7c3aed",
   },
   taskDesc: {
     fontSize: "14px",
@@ -553,7 +554,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskDescDark: {
-    color: "#8b7bab",
+    color: "#a78bfa",
   },
   taskActions: {
     display: "flex",
@@ -570,9 +571,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   doneBtnDark: {
-    background: "rgba(139, 92, 246, 0.12)",
+    background: "rgba(196, 181, 253, 0.2)",
     color: "#7c3aed",
-    borderColor: "#7c3aed",
+    borderColor: "#c4b5fd",
   },
   notDoneBtn: {
     background: "rgba(59, 130, 246, 0.1)",

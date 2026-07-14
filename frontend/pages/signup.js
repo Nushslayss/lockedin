@@ -1,8 +1,8 @@
+// SIGNUP.JSX - LOCKEDIN SIGNUP PAGE
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
 const API_URL = "https://lockedinbackend.up.railway.app";
-
 export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -69,7 +69,7 @@ export default function Signup() {
 
       <div style={styles.content}>
         <h1 style={styles.title} className="sparkle-text">
-          ✨ Task Manager ✨
+          ✨ LockedIn ✨
         </h1>
         
         <div style={{...styles.card, ...(theme === "dark" ? styles.cardDark : {})}}>
@@ -138,7 +138,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   containerDark: {
-    background: "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #c4b5fd 100%)",
+    background: "linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #e9d5ff 100%)",
   },
   themeToggle: {
     position: "absolute",
@@ -157,8 +157,8 @@ const styles = {
     justifyContent: "center",
   },
   themeToggleDark: {
-    background: "rgba(139, 92, 246, 0.3)",
-    borderColor: "#7c3aed",
+    background: "rgba(196, 181, 253, 0.4)",
+    borderColor: "#a78bfa",
   },
   content: {
     width: "100%",
@@ -183,8 +183,8 @@ const styles = {
     transition: "all 0.3s ease",
   },
   cardDark: {
-    background: "#f5f3ff",
-    border: "3px solid #a78bfa",
+    background: "#faf5ff",
+    border: "3px solid #d8b4fe",
   },
   heading: {
     fontSize: "28px",
@@ -195,7 +195,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   headingDark: {
-    color: "#6d28d9",
+    color: "#7c3aed",
   },
   error: {
     background: "#fee2e2",
@@ -244,9 +244,9 @@ const styles = {
     fontFamily: "inherit",
   },
   inputDark: {
-    border: "2px solid #c4b5fd",
-    backgroundColor: "#faf5ff",
-    color: "#4c1d95",
+    border: "2px solid #d8b4fe",
+    backgroundColor: "#f3e8ff",
+    color: "#6b21a8",
   },
   button: {
     padding: "16px",
@@ -280,7 +280,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   toggleBtnDark: {
-    color: "#6d28d9",
+    color: "#7c3aed",
   },
   test: {
     textAlign: "center",
@@ -292,6 +292,6 @@ const styles = {
     transition: "all 0.3s ease",
   },
   testDark: {
-    color: "rgba(109, 40, 217, 0.9)",
+    color: "rgba(124, 58, 237, 0.85)",
   },
 };
