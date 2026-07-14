@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
-const API_URL = "https://task-manager-production-d03d.up.railway.app";
+const API_URL = "https://lockedinbackend.up.railway.app";
 
 // MOTIVATIONAL MESSAGES - GIRLY POP DIVA VIBES! 💅✨
 const MOTIVATIONAL_MESSAGES = [
