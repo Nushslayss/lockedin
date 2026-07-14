@@ -17,28 +17,6 @@ const MOTIVATIONAL_MESSAGES = [
   "🎊 Diva alert! That's how you do it!",
   "🌟 You're that girl! Period!",
   "💥 Absolutely ate! No notes!",
-  "🎯 Task completed! Great job!",
-  "✓ Well done! Moving forward!",
-  "💪 You got it! Keep pushing!",
-  "🚀 Success! Onward and upward!",
-  "⭐ Excellent work! Keep it up!",
-];
-
-const FAILURE_MESSAGES = [
-  "Girl, it's giving 'next time energy!' 💋",
-  "No worries bestie, you'll absolutely crush it next! 🎉",
-  "It's a no from me but you're still that girl! 👑",
-  "Oop! Not this one sis, but you're still slaying! 💖",
-  "This ain't it, but you'll get the yes babe! ✨",
-  "Girlie, we can do better! Let's try again! 💪",
-  "Not today honey, but you got this! 🌟",
-  "Plot twist: You're still amazing! Try again! 🎊",
-  "That's okay! You'll get it next time! 💪",
-  "No problem! Keep trying! 🌟",
-  "Don't worry! You've got this! 💖",
-  "It's all good! Give it another shot! ↺",
-  "All good! You can do this! ✨",
-  "That happens! Keep going! 🚀",
 ];
 
 export default function Home() {
@@ -60,7 +38,6 @@ export default function Home() {
     const savedTheme = localStorage.getItem("theme") || "light";
     setTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
-
     if (!token) {
       router.push("/login");
       return;
@@ -93,8 +70,8 @@ export default function Home() {
     }
   };
 
-  const showToast = (text, kind) => {
-    setToast({ text, kind });
+  const showToast = (text) => {
+    setToast(text);
     setTimeout(() => setToast(null), 3000);
   };
 
@@ -114,30 +91,17 @@ export default function Home() {
     }
   };
 
-  const markDone = async (task) => {
+  const toggleDone = async (task) => {
+    const newStatus = task.status === "done" ? "pending" : "done";
     try {
       await fetch(`${API_URL}/api/tasks/${task._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: "done", completed: true }),
+        body: JSON.stringify({ status: newStatus, completed: newStatus === "done" }),
       });
-      const msg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
-      showToast(msg, "success");
-      fetchTasks();
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const markFailed = async (task) => {
-    try {
-      await fetch(`${API_URL}/api/tasks/${task._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ status: "failed" }),
-      });
-      const msg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
-      showToast(msg, "failure");
+      if (newStatus === "done") {
+        showToast(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
+      }
       fetchTasks();
     } catch (err) {
       console.error(err);
@@ -169,7 +133,7 @@ export default function Home() {
       setMessages([
         {
           role: "assistant",
-          text: "Heyyy! ✨ I'm your lockedin assistant. Tell me what's on your mind — I can add tasks, split them into steps, mark them done, or clear stuff out for you. What are we tackling today?",
+          text: "Heyyy! ✨ I'm your lockedin assistant. Tell me what task is on your mind and I'll ask for the priority and due date, then add it for you!",
         },
       ]);
     }
@@ -179,6 +143,7 @@ export default function Home() {
     e.preventDefault();
     if (!chatInput.trim() || chatLoading) return;
     const userMsg = chatInput;
+    const historyToSend = messages;
     setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setChatInput("");
     setChatLoading(true);
@@ -186,7 +151,7 @@ export default function Home() {
       const res = await fetch(`${API_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ message: userMsg }),
+        body: JSON.stringify({ message: userMsg, history: historyToSend }),
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!" }]);
@@ -198,21 +163,21 @@ export default function Home() {
     }
   };
 
-  const grouped = { high: [], medium: [], low: [] };
-  tasks.forEach((t) => grouped[t.priority || "medium"].push(t));
+  const sortedTasks = [...tasks].sort((a, b) => {
+    if (!a.dueDate && !b.dueDate) return 0;
+    if (!a.dueDate) return 1;
+    if (!b.dueDate) return -1;
+    return new Date(a.dueDate) - new Date(b.dueDate);
+  });
+
+  const formatDate = (d) => {
+    if (!d) return "No due date";
+    return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  };
 
   return (
     <div style={styles.page}>
-      {toast && (
-        <div
-          style={{
-            ...styles.toast,
-            background: toast.kind === "success" ? "var(--primary)" : "#8a5480",
-          }}
-        >
-          {toast.text}
-        </div>
-      )}
+      {toast && <div style={styles.toast}>{toast}</div>}
 
       <header style={styles.header}>
         <span className="wordmark" style={{ fontSize: "2.2rem" }}>lockedin</span>
@@ -227,7 +192,7 @@ export default function Home() {
       <form onSubmit={addTask} style={styles.addRow}>
         <input
           type="text"
-          placeholder="Add a task... (AI will sort the priority)"
+          placeholder="Quick add a task..."
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           style={styles.addInput}
@@ -236,64 +201,35 @@ export default function Home() {
       </form>
 
       {loading ? (
-        <p style={{ color: "var(--text-dim)", fontFamily: "Quicksand", textAlign: "center", marginTop: 60 }}>
-          Loading your tasks...
-        </p>
-      ) : tasks.length === 0 ? (
-        <p style={{ color: "var(--text-dim)", fontFamily: "Quicksand", textAlign: "center", marginTop: 60 }}>
-          No tasks yet — add one above, or ask the chat bestie for help ✨
-        </p>
+        <p style={styles.emptyText}>Loading your tasks...</p>
+      ) : sortedTasks.length === 0 ? (
+        <p style={styles.emptyText}>No tasks yet — add one above, or ask the chat bestie ✨</p>
       ) : (
-        <div style={styles.columns}>
-          {["high", "medium", "low"].map((level) => (
-            <div key={level} style={styles.column}>
-              <div style={{ ...styles.columnHeader, background: PRIORITY_COLOR[level] }}>
-                {level.toUpperCase()} ({grouped[level].length})
-              </div>
-              {grouped[level].map((task) => (
-                <div
-                  key={task._id}
-                  style={{
-                    ...styles.taskCard,
-                    opacity: task.status === "failed" ? 0.6 : 1,
-                    borderColor: task.status === "done" ? "#5fd68a" : task.status === "failed" ? "#ff5f5f" : "var(--border)",
-                  }}
-                >
-                  <p
-                    style={{
-                      margin: "0 0 8px 0",
-                      fontFamily: "Quicksand",
-                      fontWeight: 600,
-                      textDecoration: task.status === "done" ? "line-through" : "none",
-                      color: "var(--text)",
-                    }}
-                  >
-                    {task.title}
-                  </p>
-
-                  {task.subtasks?.length > 0 && (
-                    <ul style={{ margin: "0 0 10px 0", paddingLeft: 18 }}>
-                      {task.subtasks.map((s) => (
-                        <li key={s._id} style={{ fontSize: 12, color: "var(--text-dim)", fontFamily: "Poppins" }}>
-                          {s.title}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-
-                  <div style={styles.actionRow}>
-                    <button onClick={() => markDone(task)} style={{ ...styles.actionBtn, color: "#5fd68a" }}>
-                      ✓ Done
-                    </button>
-                    <button onClick={() => markFailed(task)} style={{ ...styles.actionBtn, color: "#ff9f5f" }}>
-                      ✗ Failed
-                    </button>
-                    <button onClick={() => deleteTask(task._id)} style={{ ...styles.actionBtn, color: "#ff5f5f" }}>
-                      🗑 Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
+        <div style={styles.list}>
+          {sortedTasks.map((task) => (
+            <div
+              key={task._id}
+              style={{
+                ...styles.row,
+                opacity: task.status === "done" ? 0.65 : 1,
+              }}
+            >
+              <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[task.priority || "medium"] }}>
+                {(task.priority || "medium").toUpperCase()}
+              </span>
+              <span
+                style={{
+                  ...styles.rowTitle,
+                  textDecoration: task.status === "done" ? "line-through" : "none",
+                }}
+              >
+                {task.title}
+              </span>
+              <span style={styles.rowDate}>{formatDate(task.dueDate)}</span>
+              <button onClick={() => toggleDone(task)} style={{ ...styles.rowBtn, color: task.status === "done" ? "#5fd68a" : "var(--text-dim)" }}>
+                {task.status === "done" ? "✓" : "○"}
+              </button>
+              <button onClick={() => deleteTask(task._id)} style={{ ...styles.rowBtn, color: "#ff5f5f" }}>🗑</button>
             </div>
           ))}
         </div>
@@ -306,7 +242,7 @@ export default function Home() {
       {chatOpen && (
         <div style={styles.chatPanel}>
           <div style={styles.chatHeader}>
-            <span style={{ fontFamily: "Quicksand", fontWeight: 700 }}>✨ lockedin assistant</span>
+            <span style={{ fontFamily: "Quicksand", fontWeight: 700, fontSize: 17 }}>✨ lockedin assistant</span>
             <button onClick={() => setChatOpen(false)} style={styles.chatClose}>×</button>
           </div>
           <div style={styles.chatBody}>
@@ -350,9 +286,9 @@ const styles = {
   page: { minHeight: "100vh", padding: "20px 20px 100px", position: "relative" },
   toast: {
     position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)",
-    color: "#fff", padding: "12px 22px", borderRadius: 999, fontFamily: "Quicksand",
-    fontWeight: 600, fontSize: 14, zIndex: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-    maxWidth: "90%", textAlign: "center",
+    background: "var(--primary)", color: "#fff", padding: "12px 22px", borderRadius: 999,
+    fontFamily: "Quicksand", fontWeight: 600, fontSize: 14, zIndex: 200,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.25)", maxWidth: "90%", textAlign: "center",
   },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
   iconBtn: {
@@ -373,47 +309,51 @@ const styles = {
     background: "linear-gradient(90deg, var(--primary-strong), var(--primary))",
     color: "#fff", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer",
   },
-  columns: { display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center" },
-  column: { flex: "1 1 280px", maxWidth: 340 },
-  columnHeader: {
-    color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13,
-    padding: "8px 14px", borderRadius: 12, marginBottom: 12, textAlign: "center",
+  emptyText: { color: "var(--text-dim)", fontFamily: "Quicksand", textAlign: "center", marginTop: 60 },
+  list: { maxWidth: 700, margin: "0 auto", display: "flex", flexDirection: "column", gap: 10 },
+  row: {
+    display: "flex", alignItems: "center", gap: 12, background: "var(--surface)",
+    border: "1px solid var(--border)", borderRadius: 14, padding: "12px 16px",
+    boxShadow: "0 4px 14px rgba(0,0,0,0.05)", flexWrap: "wrap",
   },
-  taskCard: {
-    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16,
-    padding: "14px 16px", marginBottom: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.05)",
+  priorityBadge: {
+    color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 10.5,
+    padding: "4px 10px", borderRadius: 999, whiteSpace: "nowrap",
   },
-  actionRow: { display: "flex", gap: 8, marginTop: 6 },
-  actionBtn: {
-    flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10,
-    padding: "6px 4px", fontFamily: "Quicksand", fontWeight: 600, fontSize: 11.5, cursor: "pointer",
+  rowTitle: { flex: 1, fontFamily: "Quicksand", fontWeight: 600, color: "var(--text)", minWidth: 120 },
+  rowDate: { fontFamily: "Poppins", fontSize: 12, color: "var(--text-dim)", whiteSpace: "nowrap" },
+  rowBtn: {
+    background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10,
+    width: 32, height: 32, fontSize: 14, cursor: "pointer",
   },
   chatFab: {
-    position: "fixed", bottom: 24, right: 24, width: 60, height: 60, borderRadius: "50%",
+    position: "fixed", bottom: 24, right: 24, width: 64, height: 64, borderRadius: "50%",
     background: "linear-gradient(135deg, var(--primary-strong), var(--primary))", border: "none",
-    fontSize: 24, color: "#fff", cursor: "pointer", boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
+    fontSize: 26, color: "#fff", cursor: "pointer", boxShadow: "0 8px 28px rgba(0,0,0,0.25)",
   },
   chatPanel: {
-    position: "fixed", bottom: 0, right: 0, width: "100%", maxWidth: 380, height: "70vh", maxHeight: 560,
-    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "20px 20px 0 0",
-    boxShadow: "0 -8px 40px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", zIndex: 100,
+    position: "fixed", bottom: 0, right: 0, width: "100%", maxWidth: 460, height: "82vh", maxHeight: 700,
+    background: "var(--surface)", border: "3px solid var(--primary)", borderRadius: "24px 24px 0 0",
+    boxShadow: "0 -10px 50px rgba(0,0,0,0.3), 0 0 30px var(--primary)", display: "flex",
+    flexDirection: "column", zIndex: 100,
   },
   chatHeader: {
     display: "flex", justifyContent: "space-between", alignItems: "center",
-    padding: "14px 18px", borderBottom: "1px solid var(--border)", color: "var(--text)",
+    padding: "18px 20px", borderBottom: "1px solid var(--border)", color: "var(--text)",
+    background: "var(--surface-2)", borderRadius: "22px 22px 0 0",
   },
-  chatClose: { background: "transparent", border: "none", fontSize: 22, color: "var(--text-dim)", cursor: "pointer" },
-  chatBody: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 },
+  chatClose: { background: "transparent", border: "none", fontSize: 26, color: "var(--text-dim)", cursor: "pointer" },
+  chatBody: { flex: 1, overflowY: "auto", padding: 18, display: "flex", flexDirection: "column", gap: 12 },
   chatBubble: {
-    maxWidth: "80%", padding: "10px 14px", borderRadius: 16, fontFamily: "Poppins", fontSize: 13.5,
+    maxWidth: "82%", padding: "12px 16px", borderRadius: 18, fontFamily: "Poppins", fontSize: 15,
   },
-  chatInputRow: { display: "flex", gap: 8, padding: 14, borderTop: "1px solid var(--border)" },
+  chatInputRow: { display: "flex", gap: 10, padding: 16, borderTop: "1px solid var(--border)" },
   chatInput: {
-    flex: 1, padding: "10px 14px", borderRadius: 999, border: "1px solid var(--border)",
-    background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 13, outline: "none",
+    flex: 1, padding: "12px 16px", borderRadius: 999, border: "1px solid var(--border)",
+    background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 14, outline: "none",
   },
   chatSend: {
-    width: 40, height: 40, borderRadius: "50%", border: "none",
-    background: "var(--primary)", color: "#fff", fontSize: 16, cursor: "pointer",
+    width: 44, height: 44, borderRadius: "50%", border: "none",
+    background: "var(--primary)", color: "#fff", fontSize: 18, cursor: "pointer",
   },
 };

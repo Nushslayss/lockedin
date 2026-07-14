@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, history } = req.body;
     if (!message) return res.status(400).json({ error: "Message required" });
 
     const tasks = await Task.find({ userId: req.userId }).sort({ createdAt: -1 });
@@ -15,34 +15,52 @@ router.post("/", authenticate, async (req, res) => {
       id: t._id.toString(),
       title: t.title,
       priority: t.priority,
-      completed: t.completed,
+      dueDate: t.dueDate,
+      status: t.status,
     }));
 
+    const today = new Date().toISOString().split("T")[0];
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        {
-          role: "system",
-          content: `You are lockedin's task assistant — warm, upbeat, a little girly-pop, but efficient.
+    const systemPrompt = `You are lockedin's task assistant — warm, upbeat, a little girly-pop, but efficient and decisive.
+Today's date is ${today} (YYYY-MM-DD). Use this to work out relative dates like "tomorrow", "Friday", "next week".
 The user's current tasks (JSON): ${JSON.stringify(taskSummary)}.
+
 Respond ONLY with valid JSON, no extra text, in this exact shape:
 {
   "reply": "short friendly response to show the user",
   "action": "create" | "delete" | "split" | "complete" | "none",
-  "taskId": "id of the task if action is delete, split, or complete (must match an id from the list above)",
+  "taskId": "id of the task if action is delete, split, or complete",
   "taskTitle": "title text if action is create",
-  "subtasks": ["step1","step2"] (only if action is split)
+  "priority": "low" | "medium" | "high",
+  "dueDate": "YYYY-MM-DD or null",
+  "subtasks": ["step1","step2"]
 }
-Rules:
-- Use "create" when the user wants to add a new task — pick a clear taskTitle from their message.
-- Use "delete" when the user wants to remove a task — match it to the closest title in their task list and return its id.
-- Use "split" when the user wants a task broken into steps — return the task's id and a subtasks array.
-- Use "complete" when the user wants to mark a task done — return its id.
-- Use "none" for greetings, questions, or general chat — just reply, no task list changes.
-- If you can't confidently match a task the user is referring to, use action "none" and ask them to clarify in "reply".`,
-        },
+
+Rules for creating a task:
+- You need THREE things before using action "create": a title, a priority, and a due date answer (a date, or explicit "no due date").
+- If the user names a task but hasn't given priority yet, use action "none" and ask exactly: what priority is this — low, medium, or high? Do not create yet.
+- If priority is known but due date isn't, use action "none" and ask when it's due (or if there's no due date). Do not create yet.
+- Once you have all three (using the conversation history to check what's already answered), use action "create" immediately in that same turn.
+- Ask only ONE missing piece per turn. Never repeat a question already answered earlier in the conversation.
+
+Other actions:
+- "delete": match the closest title in the task list and return its id.
+- "split": return the task's id and a subtasks array of clear steps.
+- "complete": return the task's id.
+- "none": greetings, small talk, or still gathering info for a create.`;
+
+    const historyMessages = Array.isArray(history)
+      ? history
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role, content: m.text }))
+      : [];
+
+    const completion = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...historyMessages,
         { role: "user", content: message },
       ],
       temperature: 0.4,
@@ -60,7 +78,12 @@ Rules:
     let tasksChanged = false;
 
     if (parsed.action === "create" && parsed.taskTitle) {
-      const task = new Task({ userId: req.userId, title: parsed.taskTitle, priority: "medium" });
+      const task = new Task({
+        userId: req.userId,
+        title: parsed.taskTitle,
+        priority: ["low", "medium", "high"].includes(parsed.priority) ? parsed.priority : "medium",
+        dueDate: parsed.dueDate && parsed.dueDate !== "null" ? parsed.dueDate : null,
+      });
       await task.save();
       tasksChanged = true;
     }
@@ -82,6 +105,7 @@ Rules:
     if (parsed.action === "complete" && parsed.taskId) {
       const task = await Task.findOne({ _id: parsed.taskId, userId: req.userId });
       if (task) {
+        task.status = "done";
         task.completed = true;
         await task.save();
         tasksChanged = true;
