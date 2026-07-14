@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import taskRoutes from "./routes/tasks.js";
 import authRoutes from "./routes/auth.js";
 import jwt from "jsonwebtoken";
+import chatRoutes from "./routes/chat.js";
 dotenv.config();
 
 const app = express();
@@ -13,6 +14,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api/tasks", taskRoutes);
+app.use("/api/chat", chatRoutes);
 app.use("/api/auth", authRoutes);
 app.get("/", (req, res) => {
   res.send("API is running...");

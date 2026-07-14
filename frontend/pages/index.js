@@ -1,19 +1,20 @@
 // INDEX.JSX - LOCKEDIN HOME/TASK MANAGER PAGE
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/router";
 
 const API_URL = "https://lockedinbackend.up.railway.app";
 
-// MOTIVATIONAL MESSAGES - GIRLY POP DIVA VIBES! 💅✨
+const PRIORITY_COLOR = { high: "#ff5f5f", medium: "#ffb648", low: "#5fd68a" };
+
 const MOTIVATIONAL_MESSAGES = [
-  "💅 Slay queen! That's what I'm talking about!",
+  "🎉 Slay queen! That's what I'm talking about!",
   "✨ Periodt! You just ate and left no crumbs!",
   "🔥 Girl boss energy! Absolutely killing it!",
   "💋 That's it girl! You're giving main character!",
   "👑 Crown stays on! You're unstoppable!",
-  "💗 Bestie, you just served LOOKS and TALENT!",
+  "💖 Bestie, you just served LOOKS and TALENT!",
   "✨ Werk it! You're literally glowing!",
-  "💃 Diva alert! That's how you do it!",
+  "🎊 Diva alert! That's how you do it!",
   "🌟 You're that girl! Period!",
   "💥 Absolutely ate! No notes!",
   "🎯 Task completed! Great job!",
@@ -23,40 +24,53 @@ const MOTIVATIONAL_MESSAGES = [
   "⭐ Excellent work! Keep it up!",
 ];
 
-// FAILURE MESSAGES - GIRLY POP BUT SUPPORTIVE! 💗
 const FAILURE_MESSAGES = [
   "Girl, it's giving 'next time energy!' 💋",
-  "No worries bestie, you'll absolutely crush it next! 💅",
+  "No worries bestie, you'll absolutely crush it next! 🎉",
   "It's a no from me but you're still that girl! 👑",
-  "Oop! Not this one sis, but you're still slaying! 💗",
+  "Oop! Not this one sis, but you're still slaying! 💖",
   "This ain't it, but you'll get the yes babe! ✨",
   "Girlie, we can do better! Let's try again! 💪",
   "Not today honey, but you got this! 🌟",
-  "Plot twist: You're still amazing! Try again! 💃",
+  "Plot twist: You're still amazing! Try again! 🎊",
   "That's okay! You'll get it next time! 💪",
   "No problem! Keep trying! 🌟",
-  "Don't worry! You've got this! 💗",
-  "It's all good! Give it another shot! 💫",
+  "Don't worry! You've got this! 💖",
+  "It's all good! Give it another shot! ↺",
   "All good! You can do this! ✨",
   "That happens! Keep going! 🚀",
 ];
 
 export default function Home() {
-  const [tasks, setTasks] = useState([]);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
   const [theme, setTheme] = useState("light");
-  const [modal, setModal] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [newTitle, setNewTitle] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [toast, setToast] = useState(null);
   const router = useRouter();
+  const chatEndRef = useRef(null);
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") || "light";
     setTheme(savedTheme);
     document.documentElement.setAttribute("data-theme", savedTheme);
+
+    if (!token) {
+      router.push("/login");
+      return;
+    }
     fetchTasks();
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, chatOpen]);
 
   const toggleTheme = () => {
     const newTheme = theme === "light" ? "dark" : "light";
@@ -65,121 +79,82 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", newTheme);
   };
 
-  const showModal = (message) => {
-    setModal({ message });
-    setTimeout(() => setModal(null), 3000);
-  };
-
   const fetchTasks = async () => {
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-      setLoading(true);
       const res = await fetch(`${API_URL}/api/tasks`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        router.push("/login");
-        return;
-      }
-      if (!res.ok) throw new Error("Failed to fetch");
       const data = await res.json();
-      setTasks(data);
-      setError("");
+      setTasks(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError("Could not connect to backend.");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddTask = async (e) => {
+  const showToast = (text, kind) => {
+    setToast({ text, kind });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const addTask = async (e) => {
     e.preventDefault();
-    if (!title.trim()) return;
-
+    if (!newTitle.trim()) return;
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/tasks`, {
+      await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ title, description }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: newTitle }),
       });
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        router.push("/login");
-        return;
-      }
-      if (!res.ok) throw new Error("Failed to add task");
-      setTitle("");
-      setDescription("");
+      setNewTitle("");
       fetchTasks();
     } catch (err) {
-      setError("Could not add task.");
+      console.error(err);
     }
   };
 
-  const markDone = async (id) => {
+  const markDone = async (task) => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/tasks/${id}`, {
+      await fetch(`${API_URL}/api/tasks/${task._id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ completed: true }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "done", completed: true }),
       });
-      if (!res.ok) throw new Error("Failed to update");
-
-      const randomMsg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
-      showModal(randomMsg);
-
+      const msg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
+      showToast(msg, "success");
       fetchTasks();
     } catch (err) {
-      setError("Could not update task.");
+      console.error(err);
     }
   };
 
-  const markNotDone = async (id) => {
+  const markFailed = async (task) => {
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/tasks/${id}`, {
+      await fetch(`${API_URL}/api/tasks/${task._id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ completed: false }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: "failed" }),
       });
-      if (!res.ok) throw new Error("Failed to update");
-
-      const randomMsg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
-      showModal(randomMsg);
-
+      const msg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
+      showToast(msg, "failure");
       fetchTasks();
     } catch (err) {
-      setError("Could not update task.");
+      console.error(err);
     }
   };
 
   const deleteTask = async (id) => {
+    const confirmed = window.confirm("Delete this task? This can't be undone.");
+    if (!confirmed) return;
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_URL}/api/tasks/${id}`, {
+      await fetch(`${API_URL}/api/tasks/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed to delete");
       fetchTasks();
     } catch (err) {
-      setError("Could not delete task.");
+      console.error(err);
     }
   };
 
@@ -188,421 +163,257 @@ export default function Home() {
     router.push("/login");
   };
 
-  return (
-    <div style={{...styles.container, ...(theme === "dark" ? styles.containerDark : {})}}>
-      <style>{`
-        @keyframes glow {
-          0%, 100% { text-shadow: 0 0 10px rgba(236, 72, 153, 0.5); }
-          50% { text-shadow: 0 0 20px rgba(236, 72, 153, 0.8); }
-        }
-        .sparkle-text {
-          animation: glow 2s ease-in-out infinite;
-        }
-        .glow-button:hover {
-          box-shadow: 0 0 30px rgba(236, 72, 153, 0.6) !important;
-          transform: scale(1.05);
-        }
-        @keyframes popIn {
-          0% { transform: scale(0.5) translateY(-100px); opacity: 0; }
-          50% { transform: scale(1.1); }
-          100% { transform: scale(1) translateY(0); opacity: 1; }
-        }
-        .modal-enter {
-          animation: popIn 0.5s ease-out;
-        }
-      `}</style>
+  const openChat = () => {
+    setChatOpen(true);
+    if (messages.length === 0) {
+      setMessages([
+        {
+          role: "assistant",
+          text: "Heyyy! ✨ I'm your lockedin assistant. Tell me what's on your mind — I can add tasks, split them into steps, mark them done, or clear stuff out for you. What are we tackling today?",
+        },
+      ]);
+    }
+  };
 
-      {modal && (
-        <div style={styles.modalOverlay} className="modal-enter">
-          <div style={styles.modalContent}>
-            <h2 style={styles.modalText}>{modal.message}</h2>
-          </div>
+  const sendChat = async (e) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+    const userMsg = chatInput;
+    setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
+    setChatInput("");
+    setChatLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: userMsg }),
+      });
+      const data = await res.json();
+      setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!" }]);
+      if (data.tasksChanged) fetchTasks();
+    } catch (err) {
+      setMessages((prev) => [...prev, { role: "assistant", text: "Hmm, something glitched. Try again?" }]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const grouped = { high: [], medium: [], low: [] };
+  tasks.forEach((t) => grouped[t.priority || "medium"].push(t));
+
+  return (
+    <div style={styles.page}>
+      {toast && (
+        <div
+          style={{
+            ...styles.toast,
+            background: toast.kind === "success" ? "var(--primary)" : "#8a5480",
+          }}
+        >
+          {toast.text}
         </div>
       )}
 
-      <div style={{...styles.navbar, ...(theme === "dark" ? styles.navbarDark : {})}}>
-        <div style={styles.navContent}>
-          <h1 style={styles.logo} className="sparkle-text">
-            ✨ LockedIn ✨
-          </h1>
-          <div style={styles.navButtons}>
-            <button style={{...styles.themeBtn, ...(theme === "dark" ? styles.themeBtnDark : {})}} onClick={toggleTheme}>
-              {theme === "light" ? "🌙 Dark" : "☀️ Light"}
-            </button>
-            <button style={{...styles.logoutBtn, ...(theme === "dark" ? styles.logoutBtnDark : {})}} onClick={logout}>
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div style={styles.main}>
-        {error && <div style={{...styles.error, ...(theme === "dark" ? styles.errorDark : {})}}>{error}</div>}
-
-        <form onSubmit={handleAddTask} style={{...styles.form, ...(theme === "dark" ? styles.formDark : {})}}>
-          <div style={styles.inputGroup}>
-            <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>✨ Task Title</label>
-            <input
-              type="text"
-              placeholder="What needs to be done?"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
-              required
-            />
-          </div>
-
-          <div style={styles.inputGroup}>
-            <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>📝 Description (optional)</label>
-            <input
-              type="text"
-              placeholder="Add a note..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
-            />
-          </div>
-
-          <button type="submit" style={styles.submitBtn} className="glow-button">
-            ✨ Add Task ✨
+      <header style={styles.header}>
+        <span className="wordmark" style={{ fontSize: "2.2rem" }}>lockedin</span>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button onClick={toggleTheme} style={styles.iconBtn}>
+            {theme === "light" ? "🌙" : "☀️"}
           </button>
-        </form>
+          <button onClick={logout} style={styles.logoutBtn}>Log out</button>
+        </div>
+      </header>
 
-        {loading ? (
-          <p style={{...styles.loading, ...(theme === "dark" ? styles.loadingDark : {})}}>Loading your tasks... 💗</p>
-        ) : tasks.length === 0 ? (
-          <p style={{...styles.empty, ...(theme === "dark" ? styles.emptyDark : {})}}>No tasks yet. Add one to get started! 🎀</p>
-        ) : (
-          <div style={styles.tasksList}>
-            {tasks.map((task) => (
-              <div key={task._id} style={{...styles.taskCard, ...(theme === "dark" ? styles.taskCardDark : {})}}>
-                <div style={styles.taskContent}>
-                  <h3 style={{
-                    ...styles.taskTitle,
-                    ...(theme === "dark" ? styles.taskTitleDark : {}),
-                    textDecoration: task.completed ? "line-through" : "none",
-                    opacity: task.completed ? 0.6 : 1,
-                  }}>
-                    {task.completed ? "✓ " : "○ "} {task.title}
-                  </h3>
-                  {task.description && (
-                    <p style={{...styles.taskDesc, ...(theme === "dark" ? styles.taskDescDark : {})}}>{task.description}</p>
+      <form onSubmit={addTask} style={styles.addRow}>
+        <input
+          type="text"
+          placeholder="Add a task... (AI will sort the priority)"
+          value={newTitle}
+          onChange={(e) => setNewTitle(e.target.value)}
+          style={styles.addInput}
+        />
+        <button type="submit" style={styles.addBtn}>+ Add</button>
+      </form>
+
+      {loading ? (
+        <p style={{ color: "var(--text-dim)", fontFamily: "Quicksand", textAlign: "center", marginTop: 60 }}>
+          Loading your tasks...
+        </p>
+      ) : tasks.length === 0 ? (
+        <p style={{ color: "var(--text-dim)", fontFamily: "Quicksand", textAlign: "center", marginTop: 60 }}>
+          No tasks yet — add one above, or ask the chat bestie for help ✨
+        </p>
+      ) : (
+        <div style={styles.columns}>
+          {["high", "medium", "low"].map((level) => (
+            <div key={level} style={styles.column}>
+              <div style={{ ...styles.columnHeader, background: PRIORITY_COLOR[level] }}>
+                {level.toUpperCase()} ({grouped[level].length})
+              </div>
+              {grouped[level].map((task) => (
+                <div
+                  key={task._id}
+                  style={{
+                    ...styles.taskCard,
+                    opacity: task.status === "failed" ? 0.6 : 1,
+                    borderColor: task.status === "done" ? "#5fd68a" : task.status === "failed" ? "#ff5f5f" : "var(--border)",
+                  }}
+                >
+                  <p
+                    style={{
+                      margin: "0 0 8px 0",
+                      fontFamily: "Quicksand",
+                      fontWeight: 600,
+                      textDecoration: task.status === "done" ? "line-through" : "none",
+                      color: "var(--text)",
+                    }}
+                  >
+                    {task.title}
+                  </p>
+
+                  {task.subtasks?.length > 0 && (
+                    <ul style={{ margin: "0 0 10px 0", paddingLeft: 18 }}>
+                      {task.subtasks.map((s) => (
+                        <li key={s._id} style={{ fontSize: 12, color: "var(--text-dim)", fontFamily: "Poppins" }}>
+                          {s.title}
+                        </li>
+                      ))}
+                    </ul>
                   )}
+
+                  <div style={styles.actionRow}>
+                    <button onClick={() => markDone(task)} style={{ ...styles.actionBtn, color: "#5fd68a" }}>
+                      ✓ Done
+                    </button>
+                    <button onClick={() => markFailed(task)} style={{ ...styles.actionBtn, color: "#ff9f5f" }}>
+                      ✗ Failed
+                    </button>
+                    <button onClick={() => deleteTask(task._id)} style={{ ...styles.actionBtn, color: "#ff5f5f" }}>
+                      🗑 Delete
+                    </button>
+                  </div>
                 </div>
-                <div style={styles.taskActions}>
-                  <button
-                    onClick={() => markDone(task._id)}
-                    style={{...styles.doneBtn, ...(theme === "dark" ? styles.doneBtnDark : {})}}
-                    disabled={task.completed}
-                  >
-                    ✓ Done
-                  </button>
-                  <button
-                    onClick={() => markNotDone(task._id)}
-                    style={{...styles.notDoneBtn, ...(theme === "dark" ? styles.notDoneBtnDark : {})}}
-                    disabled={!task.completed}
-                  >
-                    ○ Not Done
-                  </button>
-                  <button
-                    onClick={() => deleteTask(task._id)}
-                    style={{...styles.deleteBtn, ...(theme === "dark" ? styles.deleteBtnDark : {})}}
-                  >
-                    ✕ Delete
-                  </button>
-                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!chatOpen && (
+        <button onClick={openChat} style={styles.chatFab}>💬</button>
+      )}
+
+      {chatOpen && (
+        <div style={styles.chatPanel}>
+          <div style={styles.chatHeader}>
+            <span style={{ fontFamily: "Quicksand", fontWeight: 700 }}>✨ lockedin assistant</span>
+            <button onClick={() => setChatOpen(false)} style={styles.chatClose}>×</button>
+          </div>
+          <div style={styles.chatBody}>
+            {messages.map((m, i) => (
+              <div
+                key={i}
+                style={{
+                  ...styles.chatBubble,
+                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+                  background: m.role === "user" ? "var(--primary)" : "var(--surface-2)",
+                  color: m.role === "user" ? "#fff" : "var(--text)",
+                }}
+              >
+                {m.text}
               </div>
             ))}
+            {chatLoading && (
+              <div style={{ ...styles.chatBubble, alignSelf: "flex-start", background: "var(--surface-2)" }}>
+                typing...
+              </div>
+            )}
+            <div ref={chatEndRef} />
           </div>
-        )}
-      </div>
+          <form onSubmit={sendChat} style={styles.chatInputRow}>
+            <input
+              type="text"
+              placeholder="Ask me anything..."
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              style={styles.chatInput}
+            />
+            <button type="submit" style={styles.chatSend}>➤</button>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
 const styles = {
-  container: {
-    minHeight: "100vh",
-    background: "linear-gradient(135deg, #fff5fb 0%, #fce7f3 50%, #fbcfe8 100%)",
-    transition: "all 0.3s ease",
+  page: { minHeight: "100vh", padding: "20px 20px 100px", position: "relative" },
+  toast: {
+    position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)",
+    color: "#fff", padding: "12px 22px", borderRadius: 999, fontFamily: "Quicksand",
+    fontWeight: 600, fontSize: 14, zIndex: 200, boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+    maxWidth: "90%", textAlign: "center",
   },
-  containerDark: {
-    background: "linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #e9d5ff 100%)",
-  },
-  modalOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000,
-    background: "rgba(236, 72, 153, 0.9)",
-  },
-  modalContent: {
-    background: "white",
-    padding: "40px 60px",
-    borderRadius: "20px",
-    boxShadow: "0 20px 60px rgba(0, 0, 0, 0.3)",
-    border: "3px solid #fbcfe8",
-  },
-  modalText: {
-    fontSize: "28px",
-    fontWeight: "bold",
-    color: "#ec4899",
-    textAlign: "center",
-    margin: 0,
-  },
-  navbar: {
-    background: "linear-gradient(90deg, #ec4899 0%, #db2777 100%)",
-    padding: "20px",
-    boxShadow: "0 10px 30px rgba(236, 72, 153, 0.3)",
-    position: "sticky",
-    top: 0,
-    zIndex: 100,
-    transition: "all 0.3s ease",
-  },
-  navbarDark: {
-    background: "linear-gradient(90deg, #c4b5fd 0%, #a78bfa 100%)",
-    boxShadow: "0 10px 30px rgba(168, 85, 247, 0.25)",
-  },
-  navContent: {
-    maxWidth: "1000px",
-    margin: "0 auto",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logo: {
-    color: "white",
-    fontSize: "28px",
-    fontWeight: "bold",
-    textShadow: "0 0 15px rgba(255, 255, 255, 0.5)",
-  },
-  navButtons: {
-    display: "flex",
-    gap: "10px",
-  },
-  themeBtn: {
-    background: "rgba(255, 255, 255, 0.2)",
-    border: "2px solid white",
-    color: "white",
-    padding: "8px 16px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  themeBtnDark: {
-    background: "rgba(255, 255, 255, 0.3)",
-    borderColor: "#ffffff",
-    color: "#6b21a8",
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 },
+  iconBtn: {
+    background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "50%",
+    width: 40, height: 40, fontSize: 16, cursor: "pointer",
   },
   logoutBtn: {
-    background: "rgba(255, 255, 255, 0.2)",
-    border: "2px solid white",
-    color: "white",
-    padding: "8px 16px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
+    background: "transparent", border: "1px solid var(--border)", borderRadius: 999,
+    padding: "8px 16px", fontFamily: "Quicksand", fontWeight: 600, color: "var(--text-dim)", cursor: "pointer",
   },
-  logoutBtnDark: {
-    background: "rgba(255, 255, 255, 0.3)",
-    borderColor: "#ffffff",
-    color: "#6b21a8",
+  addRow: { display: "flex", gap: 10, marginBottom: 24, maxWidth: 600, margin: "0 auto 24px" },
+  addInput: {
+    flex: 1, padding: "12px 16px", borderRadius: 14, border: "1px solid var(--border)",
+    background: "var(--surface)", color: "var(--text)", fontFamily: "Poppins", fontSize: 14, outline: "none",
   },
-  main: {
-    maxWidth: "900px",
-    margin: "40px auto",
-    padding: "0 20px",
+  addBtn: {
+    padding: "12px 20px", borderRadius: 14, border: "none",
+    background: "linear-gradient(90deg, var(--primary-strong), var(--primary))",
+    color: "#fff", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer",
   },
-  error: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    padding: "14px",
-    borderRadius: "10px",
-    marginBottom: "20px",
-    border: "2px solid #fca5a5",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  errorDark: {
-    background: "#fce7f3",
-    color: "#9d174d",
-    borderColor: "#f0abfc",
-  },
-  form: {
-    background: "white",
-    padding: "30px",
-    borderRadius: "20px",
-    boxShadow: "0 10px 40px rgba(236, 72, 153, 0.15)",
-    marginBottom: "30px",
-    border: "3px solid #ec4899",
-    transition: "all 0.3s ease",
-  },
-  formDark: {
-    background: "#faf5ff",
-    border: "3px solid #d8b4fe",
-    boxShadow: "0 10px 40px rgba(139, 92, 246, 0.15)",
-  },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
-    marginBottom: "16px",
-  },
-  label: {
-    fontSize: "14px",
-    fontWeight: "bold",
-    color: "#ec4899",
-    transition: "all 0.3s ease",
-  },
-  labelDark: {
-    color: "#7c3aed",
-  },
-  input: {
-    padding: "12px 16px",
-    border: "2px solid #fbcfe8",
-    borderRadius: "12px",
-    fontSize: "16px",
-    outline: "none",
-    backgroundColor: "#fff5fb",
-    color: "#1f2937",
-    transition: "all 0.3s ease",
-  },
-  inputDark: {
-    border: "2px solid #d8b4fe",
-    backgroundColor: "#f3e8ff",
-    color: "#6b21a8",
-  },
-  submitBtn: {
-    width: "100%",
-    padding: "14px",
-    background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
-    color: "white",
-    border: "none",
-    borderRadius: "12px",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer",
-    transition: "all 0.3s ease",
-    textShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-  },
-  loading: {
-    textAlign: "center",
-    fontSize: "18px",
-    color: "#ec4899",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  loadingDark: {
-    color: "#7c3aed",
-  },
-  empty: {
-    textAlign: "center",
-    fontSize: "18px",
-    color: "#db2777",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  emptyDark: {
-    color: "#7c3aed",
-  },
-  tasksList: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "15px",
+  columns: { display: "flex", gap: 20, flexWrap: "wrap", justifyContent: "center" },
+  column: { flex: "1 1 280px", maxWidth: 340 },
+  columnHeader: {
+    color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13,
+    padding: "8px 14px", borderRadius: 12, marginBottom: 12, textAlign: "center",
   },
   taskCard: {
-    background: "white",
-    padding: "20px",
-    borderRadius: "15px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    boxShadow: "0 5px 20px rgba(236, 72, 153, 0.1)",
-    border: "2px solid #fbcfe8",
-    transition: "all 0.3s ease",
+    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16,
+    padding: "14px 16px", marginBottom: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.05)",
   },
-  taskCardDark: {
-    background: "#faf5ff",
-    border: "2px solid #d8b4fe",
-    boxShadow: "0 5px 20px rgba(139, 92, 246, 0.15)",
+  actionRow: { display: "flex", gap: 8, marginTop: 6 },
+  actionBtn: {
+    flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10,
+    padding: "6px 4px", fontFamily: "Quicksand", fontWeight: 600, fontSize: 11.5, cursor: "pointer",
   },
-  taskContent: {
-    flex: 1,
+  chatFab: {
+    position: "fixed", bottom: 24, right: 24, width: 60, height: 60, borderRadius: "50%",
+    background: "linear-gradient(135deg, var(--primary-strong), var(--primary))", border: "none",
+    fontSize: 24, color: "#fff", cursor: "pointer", boxShadow: "0 8px 24px rgba(0,0,0,0.2)",
   },
-  taskTitle: {
-    fontSize: "18px",
-    fontWeight: "bold",
-    color: "#ec4899",
-    marginBottom: "5px",
-    transition: "all 0.3s ease",
+  chatPanel: {
+    position: "fixed", bottom: 0, right: 0, width: "100%", maxWidth: 380, height: "70vh", maxHeight: 560,
+    background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "20px 20px 0 0",
+    boxShadow: "0 -8px 40px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", zIndex: 100,
   },
-  taskTitleDark: {
-    color: "#7c3aed",
+  chatHeader: {
+    display: "flex", justifyContent: "space-between", alignItems: "center",
+    padding: "14px 18px", borderBottom: "1px solid var(--border)", color: "var(--text)",
   },
-  taskDesc: {
-    fontSize: "14px",
-    color: "#9ca3af",
-    transition: "all 0.3s ease",
+  chatClose: { background: "transparent", border: "none", fontSize: 22, color: "var(--text-dim)", cursor: "pointer" },
+  chatBody: { flex: 1, overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 10 },
+  chatBubble: {
+    maxWidth: "80%", padding: "10px 14px", borderRadius: 16, fontFamily: "Poppins", fontSize: 13.5,
   },
-  taskDescDark: {
-    color: "#a78bfa",
+  chatInputRow: { display: "flex", gap: 8, padding: 14, borderTop: "1px solid var(--border)" },
+  chatInput: {
+    flex: 1, padding: "10px 14px", borderRadius: 999, border: "1px solid var(--border)",
+    background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 13, outline: "none",
   },
-  taskActions: {
-    display: "flex",
-    gap: "10px",
-  },
-  doneBtn: {
-    background: "rgba(236, 72, 153, 0.1)",
-    color: "#ec4899",
-    border: "2px solid #ec4899",
-    padding: "8px 14px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  doneBtnDark: {
-    background: "rgba(196, 181, 253, 0.2)",
-    color: "#7c3aed",
-    borderColor: "#c4b5fd",
-  },
-  notDoneBtn: {
-    background: "rgba(59, 130, 246, 0.1)",
-    color: "#3b82f6",
-    border: "2px solid #3b82f6",
-    padding: "8px 14px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  notDoneBtnDark: {
-    background: "rgba(99, 102, 241, 0.12)",
-    color: "#6366f1",
-    borderColor: "#6366f1",
-  },
-  deleteBtn: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    border: "2px solid #fca5a5",
-    padding: "8px 14px",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  deleteBtnDark: {
-    background: "#fce7f3",
-    color: "#be185d",
-    borderColor: "#f0abfc",
+  chatSend: {
+    width: 40, height: 40, borderRadius: "50%", border: "none",
+    background: "var(--primary)", color: "#fff", fontSize: 16, cursor: "pointer",
   },
 };
