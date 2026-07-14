@@ -14,13 +14,67 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
+// GET tasks grouped by day (Today / Tomorrow / This Week / Later / No Date)
+router.get("/grouped-by-day", authenticate, async (req, res) => {
+  try {
+    const tasks = await Task.find({ userId: req.userId }).sort({ dueDate: 1 });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const weekEnd = new Date(today);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+
+    const groups = { today: [], tomorrow: [], thisWeek: [], later: [], noDate: [] };
+
+    tasks.forEach((task) => {
+      if (!task.dueDate) {
+        groups.noDate.push(task);
+        return;
+      }
+      const due = new Date(task.dueDate);
+      due.setHours(0, 0, 0, 0);
+
+      if (due.getTime() === today.getTime()) groups.today.push(task);
+      else if (due.getTime() === tomorrow.getTime()) groups.tomorrow.push(task);
+      else if (due > tomorrow && due <= weekEnd) groups.thisWeek.push(task);
+      else groups.later.push(task);
+    });
+
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET tasks grouped by priority (High / Medium / Low)
+router.get("/by-priority", authenticate, async (req, res) => {
+  try {
+    const tasks = await Task.find({ userId: req.userId }).sort({ dueDate: 1 });
+    const groups = { high: [], medium: [], low: [] };
+    tasks.forEach((task) => groups[task.priority || "medium"].push(task));
+    res.json(groups);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST new task (with userId)
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, dueDate, priority, subtasks, tags } = req.body;
     if (!title) return res.status(400).json({ error: "Title required" });
-    
-    const task = new Task({ userId: req.userId, title, description });
+
+    const task = new Task({
+      userId: req.userId,
+      title,
+      description,
+      dueDate: dueDate || null,
+      priority: priority || "medium",
+      subtasks: subtasks || [],
+      tags: tags || [],
+    });
     const savedTask = await task.save();
     res.status(201).json(savedTask);
   } catch (err) {
@@ -33,7 +87,7 @@ router.patch("/:id", authenticate, async (req, res) => {
   try {
     const task = await Task.findOne({ _id: req.params.id, userId: req.userId });
     if (!task) return res.status(404).json({ error: "Task not found" });
-    
+
     Object.assign(task, req.body);
     await task.save();
     res.json(task);
