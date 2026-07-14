@@ -3,10 +3,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/router";
 
 const API_URL = "https://lockedinbackend.up.railway.app";
+
 export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [theme, setTheme] = useState("light");
   const router = useRouter();
 
@@ -23,10 +25,10 @@ export default function Signup() {
     document.documentElement.setAttribute("data-theme", newTheme);
   };
 
-  const handleSignup = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    
+    setLoading(true);
     try {
       const res = await fetch(`${API_URL}/api/auth/signup`, {
         method: "POST",
@@ -34,92 +36,72 @@ export default function Signup() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      
-      if (data.token) {
-        localStorage.setItem("token", data.token);
-        alert("✨ Signup successful! Redirecting...");
-        router.push("/");
-      } else {
-        setError(data.error || "Signup failed");
+      if (!res.ok) {
+        setError(data.error || "Something went wrong");
+        setLoading(false);
+        return;
       }
+      localStorage.setItem("token", data.token);
+      router.push("/");
     } catch (err) {
-      setError("Connection error. Please try again.");
+      setError("Could not connect. Try again.");
+      setLoading(false);
     }
   };
 
   return (
-    <div style={{...styles.container, ...(theme === "dark" ? styles.containerDark : {})}}>
-      <style>{`
-        @keyframes glow {
-          0%, 100% { text-shadow: 0 0 10px rgba(236, 72, 153, 0.5); }
-          50% { text-shadow: 0 0 20px rgba(236, 72, 153, 0.8); }
-        }
-        .sparkle-text {
-          animation: glow 2s ease-in-out infinite;
-        }
-        .glow-button:hover {
-          box-shadow: 0 0 30px rgba(236, 72, 153, 0.6) !important;
-          transform: scale(1.05);
-        }
-      `}</style>
-
-      <button style={{...styles.themeToggle, ...(theme === "dark" ? styles.themeToggleDark : {})}} onClick={toggleTheme}>
+    <div style={styles.page}>
+      <button onClick={toggleTheme} style={styles.themeBtn}>
         {theme === "light" ? "🌙" : "☀️"}
       </button>
 
-      <div style={styles.content}>
-        <h1 style={styles.title} className="sparkle-text">
-          ✨ LockedIn ✨
-        </h1>
-        
-        <div style={{...styles.card, ...(theme === "dark" ? styles.cardDark : {})}}>
-          <h2 style={{...styles.heading, ...(theme === "dark" ? styles.headingDark : {})}}>Create Account 💗</h2>
+      <div className="sparkle-wrap" style={{ marginBottom: 4 }}>
+        <span className="sparkle" style={{ top: -10, left: -18 }}>✨</span>
+        <span className="sparkle" style={{ top: -14, right: -14, animationDelay: "0.4s" }}>✨</span>
+        <span className="sparkle" style={{ bottom: -8, left: 20, animationDelay: "0.8s" }}>💫</span>
+        <span className="sparkle" style={{ bottom: -6, right: 10, animationDelay: "1.2s" }}>✨</span>
+        <h1 className="wordmark" style={{ fontSize: "3rem", margin: 0 }}>lockedin</h1>
+      </div>
+      <p style={{ color: "var(--text-dim)", fontFamily: "Quicksand", marginTop: 0, marginBottom: 28 }}>
+        Let's get you set up
+      </p>
 
-          {error && <div style={{...styles.error, ...(theme === "dark" ? styles.errorDark : {})}}>{error}</div>}
-
-          <form onSubmit={handleSignup} style={styles.form}>
-            <div style={styles.inputGroup}>
-              <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>📧 Email</label>
-              <input
-                type="email"
-                placeholder="your@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
-                required
-              />
-            </div>
-
-            <div style={styles.inputGroup}>
-              <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>🔒 Password</label>
-              <input
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
-                required
-              />
-            </div>
-
-            <button type="submit" style={styles.button} className="glow-button">
-              ✨ Sign Up ✨
-            </button>
-          </form>
-
-          <p style={styles.toggle}>
-            Already have an account?{" "}
-            <button
-              onClick={() => router.push("/login")}
-              style={{...styles.toggleBtn, ...(theme === "dark" ? styles.toggleBtnDark : {})}}
-            >
-              Login here
-            </button>
-          </p>
+      <div style={styles.card}>
+        <div style={styles.switcher}>
+          <button style={styles.switchInactive} onClick={() => router.push("/login")}>
+            Log in
+          </button>
+          <button style={styles.switchActive}>Sign up</button>
         </div>
 
-        <p style={{...styles.test, ...(theme === "dark" ? styles.testDark : {})}}>
-          💡 Test: test@test.com | password123
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={styles.input}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={styles.input}
+          />
+          {error && <p style={styles.error}>{error}</p>}
+          <button type="submit" disabled={loading} style={styles.submitBtn}>
+            {loading ? "Creating account..." : "Sign up"}
+          </button>
+        </form>
+
+        <p style={styles.footerText}>
+          Already have an account?{" "}
+          <span style={styles.link} onClick={() => router.push("/login")}>
+            Log in
+          </span>
         </p>
       </div>
     </div>
@@ -127,171 +109,104 @@ export default function Signup() {
 }
 
 const styles = {
-  container: {
+  page: {
     minHeight: "100vh",
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    background: "linear-gradient(135deg, #ec4899 0%, #db2777 50%, #be185d 100%)",
+    padding: 20,
     position: "relative",
-    overflow: "hidden",
-    transition: "all 0.3s ease",
   },
-  containerDark: {
-    background: "linear-gradient(135deg, #f3e8ff 0%, #ede9fe 50%, #e9d5ff 100%)",
-  },
-  themeToggle: {
+  themeBtn: {
     position: "absolute",
-    top: "20px",
-    right: "20px",
-    background: "rgba(255, 255, 255, 0.2)",
-    border: "2px solid white",
+    top: 20,
+    right: 20,
+    background: "var(--surface-2)",
+    border: "1px solid var(--border)",
     borderRadius: "50%",
-    width: "50px",
-    height: "50px",
-    fontSize: "24px",
+    width: 44,
+    height: 44,
+    fontSize: 18,
     cursor: "pointer",
-    transition: "all 0.3s ease",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  themeToggleDark: {
-    background: "rgba(196, 181, 253, 0.4)",
-    borderColor: "#a78bfa",
-  },
-  content: {
-    width: "100%",
-    maxWidth: "420px",
-    padding: "20px",
-    zIndex: 10,
-  },
-  title: {
-    fontSize: "40px",
-    color: "white",
-    textAlign: "center",
-    marginBottom: "50px",
-    textShadow: "0 4px 15px rgba(0, 0, 0, 0.3)",
-    fontWeight: "bold",
   },
   card: {
-    background: "white",
-    padding: "50px 40px",
-    borderRadius: "25px",
-    boxShadow: "0 25px 60px rgba(0, 0, 0, 0.3)",
-    border: "3px solid #fbcfe8",
-    transition: "all 0.3s ease",
+    background: "var(--surface)",
+    border: "1px solid var(--border)",
+    borderRadius: 24,
+    padding: "32px 28px",
+    width: "100%",
+    maxWidth: 380,
+    boxShadow: "0 10px 40px rgba(0,0,0,0.08)",
   },
-  cardDark: {
-    background: "#faf5ff",
-    border: "3px solid #d8b4fe",
-  },
-  heading: {
-    fontSize: "28px",
-    color: "#ec4899",
-    marginBottom: "35px",
-    textAlign: "center",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  headingDark: {
-    color: "#7c3aed",
-  },
-  error: {
-    background: "#fee2e2",
-    color: "#991b1b",
-    padding: "14px",
-    borderRadius: "10px",
-    marginBottom: "20px",
-    border: "2px solid #fca5a5",
-    textAlign: "center",
-    fontWeight: "bold",
-    transition: "all 0.3s ease",
-  },
-  errorDark: {
-    background: "#fce7f3",
-    color: "#9d174d",
-    borderColor: "#f0abfc",
-  },
-  form: {
+  switcher: {
     display: "flex",
-    flexDirection: "column",
-    gap: "20px",
+    background: "var(--surface-2)",
+    borderRadius: 999,
+    padding: 4,
+    marginBottom: 24,
   },
-  inputGroup: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "8px",
+  switchActive: {
+    flex: 1,
+    padding: "10px 0",
+    borderRadius: 999,
+    border: "none",
+    background: "var(--primary)",
+    color: "#fff",
+    fontFamily: "Quicksand",
+    fontWeight: 600,
+    cursor: "pointer",
   },
-  label: {
-    fontSize: "14px",
-    fontWeight: "bold",
-    color: "#ec4899",
-    transition: "all 0.3s ease",
-  },
-  labelDark: {
-    color: "#7c3aed",
+  switchInactive: {
+    flex: 1,
+    padding: "10px 0",
+    borderRadius: 999,
+    border: "none",
+    background: "transparent",
+    color: "var(--text-dim)",
+    fontFamily: "Quicksand",
+    fontWeight: 600,
+    cursor: "pointer",
   },
   input: {
     padding: "14px 16px",
-    border: "2px solid #fbcfe8",
-    borderRadius: "12px",
-    fontSize: "16px",
+    borderRadius: 14,
+    border: "1px solid var(--border)",
+    background: "var(--surface-2)",
+    color: "var(--text)",
+    fontFamily: "Poppins",
+    fontSize: 14,
     outline: "none",
-    backgroundColor: "#fff5fb",
-    color: "#1f2937",
-    transition: "all 0.3s ease",
-    fontFamily: "inherit",
   },
-  inputDark: {
-    border: "2px solid #d8b4fe",
-    backgroundColor: "#f3e8ff",
-    color: "#6b21a8",
-  },
-  button: {
-    padding: "16px",
-    background: "linear-gradient(135deg, #ec4899 0%, #db2777 100%)",
-    color: "white",
+  submitBtn: {
+    marginTop: 6,
+    padding: "14px 0",
+    borderRadius: 14,
     border: "none",
-    borderRadius: "12px",
-    fontSize: "18px",
-    fontWeight: "bold",
+    background: "linear-gradient(90deg, var(--primary-strong), var(--primary))",
+    color: "#fff",
+    fontFamily: "Quicksand",
+    fontWeight: 700,
+    fontSize: 15,
     cursor: "pointer",
-    marginTop: "10px",
-    transition: "all 0.3s ease",
-    textShadow: "0 2px 4px rgba(0, 0, 0, 0.2)",
-    letterSpacing: "0.5px",
   },
-  toggle: {
+  error: {
+    color: "#ff5f5f",
+    fontFamily: "Quicksand",
+    fontSize: 13,
+    margin: 0,
+  },
+  footerText: {
     textAlign: "center",
-    marginTop: "25px",
-    color: "#6b7280",
-    fontSize: "14px",
-    transition: "all 0.3s ease",
+    color: "var(--text-dim)",
+    fontFamily: "Quicksand",
+    fontSize: 13,
+    marginTop: 20,
+    marginBottom: 0,
   },
-  toggleBtn: {
-    background: "none",
-    border: "none",
-    color: "#ec4899",
-    fontWeight: "bold",
+  link: {
+    color: "var(--primary-strong)",
+    fontWeight: 700,
     cursor: "pointer",
-    textDecoration: "underline",
-    fontSize: "14px",
-    transition: "all 0.3s ease",
-  },
-  toggleBtnDark: {
-    color: "#7c3aed",
-  },
-  test: {
-    textAlign: "center",
-    marginTop: "40px",
-    color: "rgba(255, 255, 255, 0.9)",
-    fontSize: "13px",
-    fontStyle: "italic",
-    fontWeight: "500",
-    transition: "all 0.3s ease",
-  },
-  testDark: {
-    color: "rgba(124, 58, 237, 0.85)",
   },
 };

@@ -1,155 +1,71 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@import url('https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@400;500;600;700&family=Poppins:wght@300;400;500;600&display=swap');
 
 :root {
-  --primary-pink: #ec4899;
-  --light-pink: #fbcfe8;
-  --dark-pink: #be185d;
-  --sparkle: #fbbf24;
-  
-  /* Light Mode */
-  --bg-light: #fff5fb;
-  --text-light: #1f2937;
-  --card-light: #ffffff;
-  --border-light: #f3e8ff;
+  --bg: #fff3f8;
+  --surface: #ffffff;
+  --surface-2: #ffe0ef;
+  --primary: #ff8fc7;
+  --primary-strong: #ff5fae;
+  --text: #4a1942;
+  --text-dim: #8a5480;
+  --border: #ffd1e8;
 }
 
 [data-theme="dark"] {
-  --bg-light: #1a1a2e;
-  --text-light: #fbbf24;
-  --card-light: #16213e;
-  --border-light: #ec4899;
+  --bg: #1b1025;
+  --surface: #241733;
+  --surface-2: #2f1e45;
+  --primary: #c9a4ff;
+  --primary-strong: #9b6ef5;
+  --text: #f3e9ff;
+  --text-dim: #b8a0d6;
+  --border: #3d2a56;
 }
 
-html, body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: var(--bg-light);
-  color: var(--text-light);
-  transition: all 0.3s ease;
-  overflow-x: hidden;
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Poppins', sans-serif;
+  margin: 0;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* Sparkle Animation */
-@keyframes sparkle {
-  0%, 100% {
-    opacity: 0;
-    transform: scale(0);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes glow {
-  0%, 100% {
-    text-shadow: 0 0 10px rgba(236, 72, 153, 0.5);
-  }
-  50% {
-    text-shadow: 0 0 20px rgba(236, 72, 153, 0.8), 0 0 30px rgba(251, 191, 36, 0.6);
-  }
+.wordmark {
+  font-family: 'Pacifico', cursive;
+  background: linear-gradient(90deg, var(--primary), var(--primary-strong), var(--primary));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 3s linear infinite;
+  position: relative;
+  display: inline-block;
 }
 
 @keyframes shimmer {
-  0% {
-    background-position: -1000px 0;
-  }
-  100% {
-    background-position: 1000px 0;
-  }
+  to { background-position: 200% center; }
 }
 
-@keyframes float {
-  0%, 100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-20px);
-  }
+.sparkle-wrap {
+  position: relative;
+  display: inline-block;
 }
 
-body {
-  background: linear-gradient(135deg, var(--bg-light) 0%, rgba(236, 72, 153, 0.05) 100%);
+.sparkle {
+  position: absolute;
+  font-size: 1rem;
+  color: var(--primary);
+  animation: twinkle 1.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 10px;
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.7) rotate(0deg); }
+  50% { opacity: 1; transform: scale(1.15) rotate(15deg); }
 }
 
-::-webkit-scrollbar-track {
-  background: var(--bg-light);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--primary-pink);
-  border-radius: 5px;
-  transition: all 0.3s ease;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--dark-pink);
-  box-shadow: 0 0 15px rgba(236, 72, 153, 0.5);
-}
-
-/* Firefox Scrollbar */
-* {
-  scrollbar-color: var(--primary-pink) var(--bg-light);
-  scrollbar-width: thin;
-}
-
-/* Selection Color */
-::selection {
-  background: var(--primary-pink);
-  color: white;
-}
-
-/* Input Focus */
-input:focus {
-  outline: none;
-  border-color: var(--primary-pink) !important;
-  box-shadow: 0 0 10px rgba(236, 72, 153, 0.3);
-}
-
-/* Button Focus */
-button:focus {
-  outline: none;
-}
-
-/* Smooth Transitions */
-* {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-
-code {
-  background: rgba(236, 72, 153, 0.1);
-  padding: 2px 6px;
-  border-radius: 3px;
-  color: var(--primary-pink);
-  font-family: 'Courier New', Courier, monospace;
-}
-
-a {
-  color: var(--primary-pink);
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-a:hover {
-  text-decoration: underline;
-  opacity: 0.8;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  html, body {
-    font-size: 14px;
-  }
+@media (prefers-reduced-motion: reduce) {
+  .wordmark, .sparkle { animation: none; }
 }
