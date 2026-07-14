@@ -4,9 +4,8 @@ A full-stack Task Manager app for creating, tracking, and managing tasks — bui
 
 ## Live Demo
 
-- **Frontend:** https://lockedin-8080.up.railway.app/login
-- **Backend API:** https://lockedinbackend.up.railway.app/
-
+- **Frontend:** https://lockedin-8080.up.railway.app
+- **Backend API:** https://lockedinbackend.up.railway.app
 ## Tech Stack
 
 **Frontend**
