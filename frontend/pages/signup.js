@@ -48,22 +48,11 @@ export default function Signup() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{...styles.container, ...(theme === "dark" ? styles.containerDark : {})}}>
       <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-20px); }
-        }
         @keyframes glow {
           0%, 100% { text-shadow: 0 0 10px rgba(236, 72, 153, 0.5); }
           50% { text-shadow: 0 0 20px rgba(236, 72, 153, 0.8); }
-        }
-        @keyframes sparkle {
-          0%, 100% { opacity: 0; transform: scale(0); }
-          50% { opacity: 1; transform: scale(1); }
-        }
-        .floating {
-          animation: float 3s ease-in-out infinite;
         }
         .sparkle-text {
           animation: glow 2s ease-in-out infinite;
@@ -74,7 +63,7 @@ export default function Signup() {
         }
       `}</style>
 
-      <button style={styles.themeToggle} onClick={toggleTheme}>
+      <button style={{...styles.themeToggle, ...(theme === "dark" ? styles.themeToggleDark : {})}} onClick={toggleTheme}>
         {theme === "light" ? "🌙" : "☀️"}
       </button>
 
@@ -83,32 +72,32 @@ export default function Signup() {
           ✨ Task Manager ✨
         </h1>
         
-        <div style={styles.card}>
-          <h2 style={styles.heading}>Create Account 💗</h2>
+        <div style={{...styles.card, ...(theme === "dark" ? styles.cardDark : {})}}>
+          <h2 style={{...styles.heading, ...(theme === "dark" ? styles.headingDark : {})}}>Create Account 💗</h2>
 
-          {error && <div style={styles.error}>{error}</div>}
+          {error && <div style={{...styles.error, ...(theme === "dark" ? styles.errorDark : {})}}>{error}</div>}
 
           <form onSubmit={handleSignup} style={styles.form}>
             <div style={styles.inputGroup}>
-              <label style={styles.label}>📧 Email</label>
+              <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>📧 Email</label>
               <input
                 type="email"
                 placeholder="your@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                style={styles.input}
+                style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
                 required
               />
             </div>
 
             <div style={styles.inputGroup}>
-              <label style={styles.label}>🔒 Password</label>
+              <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>🔒 Password</label>
               <input
                 type="password"
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                style={styles.input}
+                style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
                 required
               />
             </div>
@@ -122,14 +111,14 @@ export default function Signup() {
             Already have an account?{" "}
             <button
               onClick={() => router.push("/login")}
-              style={styles.toggleBtn}
+              style={{...styles.toggleBtn, ...(theme === "dark" ? styles.toggleBtnDark : {})}}
             >
               Login here
             </button>
           </p>
         </div>
 
-        <p style={styles.test}>
+        <p style={{...styles.test, ...(theme === "dark" ? styles.testDark : {})}}>
           💡 Test: test@test.com | password123
         </p>
       </div>
@@ -146,6 +135,10 @@ const styles = {
     background: "linear-gradient(135deg, #ec4899 0%, #db2777 50%, #be185d 100%)",
     position: "relative",
     overflow: "hidden",
+    transition: "all 0.3s ease",
+  },
+  containerDark: {
+    background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
   },
   themeToggle: {
     position: "absolute",
@@ -162,6 +155,10 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+  },
+  themeToggleDark: {
+    background: "rgba(251, 191, 36, 0.2)",
+    borderColor: "#fbbf24",
   },
   content: {
     width: "100%",
@@ -183,7 +180,11 @@ const styles = {
     borderRadius: "25px",
     boxShadow: "0 25px 60px rgba(0, 0, 0, 0.3)",
     border: "3px solid #fbcfe8",
-    backdropFilter: "blur(10px)",
+    transition: "all 0.3s ease",
+  },
+  cardDark: {
+    background: "#16213e",
+    border: "3px solid #0f3460",
   },
   heading: {
     fontSize: "28px",
@@ -191,6 +192,10 @@ const styles = {
     marginBottom: "35px",
     textAlign: "center",
     fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  headingDark: {
+    color: "#fbbf24",
   },
   error: {
     background: "#fee2e2",
@@ -201,6 +206,12 @@ const styles = {
     border: "2px solid #fca5a5",
     textAlign: "center",
     fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  errorDark: {
+    background: "rgba(239, 68, 68, 0.2)",
+    color: "#fca5a5",
+    borderColor: "#dc2626",
   },
   form: {
     display: "flex",
@@ -216,6 +227,10 @@ const styles = {
     fontSize: "14px",
     fontWeight: "bold",
     color: "#ec4899",
+    transition: "all 0.3s ease",
+  },
+  labelDark: {
+    color: "#fbbf24",
   },
   input: {
     padding: "14px 16px",
@@ -224,8 +239,14 @@ const styles = {
     fontSize: "16px",
     outline: "none",
     backgroundColor: "#fff5fb",
+    color: "#1f2937",
     transition: "all 0.3s ease",
     fontFamily: "inherit",
+  },
+  inputDark: {
+    border: "2px solid #0f3460",
+    backgroundColor: "#0f3460",
+    color: "#fbbf24",
   },
   button: {
     padding: "16px",
@@ -246,6 +267,7 @@ const styles = {
     marginTop: "25px",
     color: "#6b7280",
     fontSize: "14px",
+    transition: "all 0.3s ease",
   },
   toggleBtn: {
     background: "none",
@@ -257,6 +279,9 @@ const styles = {
     fontSize: "14px",
     transition: "all 0.3s ease",
   },
+  toggleBtnDark: {
+    color: "#fbbf24",
+  },
   test: {
     textAlign: "center",
     marginTop: "40px",
@@ -264,5 +289,9 @@ const styles = {
     fontSize: "13px",
     fontStyle: "italic",
     fontWeight: "500",
+    transition: "all 0.3s ease",
+  },
+  testDark: {
+    color: "rgba(251, 191, 36, 0.8)",
   },
 };

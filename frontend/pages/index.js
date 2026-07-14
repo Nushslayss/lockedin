@@ -64,14 +64,8 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", newTheme);
   };
 
-  const showModal = (type) => {
-    if (type === "success") {
-      const randomMsg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
-      setModal({ type: "success", message: randomMsg });
-    } else {
-      const randomMsg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
-      setModal({ type: "failure", message: randomMsg });
-    }
+  const showModal = (message) => {
+    setModal({ message });
     setTimeout(() => setModal(null), 3000);
   };
 
@@ -130,7 +124,7 @@ export default function Home() {
     }
   };
 
-  const toggleComplete = async (id, completed) => {
+  const markDone = async (id) => {
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/tasks/${id}`, {
@@ -139,15 +133,34 @@ export default function Home() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ completed: !completed }),
+        body: JSON.stringify({ completed: true }),
       });
       if (!res.ok) throw new Error("Failed to update");
       
-      if (!completed) {
-        showModal("success");
-      } else {
-        showModal("failure");
-      }
+      const randomMsg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
+      showModal(randomMsg);
+      
+      fetchTasks();
+    } catch (err) {
+      setError("Could not update task.");
+    }
+  };
+
+  const markNotDone = async (id) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ completed: false }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      
+      const randomMsg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
+      showModal(randomMsg);
       
       fetchTasks();
     } catch (err) {
@@ -163,7 +176,6 @@ export default function Home() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to delete");
-      showModal("failure");
       fetchTasks();
     } catch (err) {
       setError("Could not delete task.");
@@ -176,7 +188,7 @@ export default function Home() {
   };
 
   return (
-    <div style={styles.container}>
+    <div style={{...styles.container, ...(theme === "dark" ? styles.containerDark : {})}}>
       <style>{`
         @keyframes glow {
           0%, 100% { text-shadow: 0 0 10px rgba(236, 72, 153, 0.5); }
@@ -194,36 +206,29 @@ export default function Home() {
           50% { transform: scale(1.1); }
           100% { transform: scale(1) translateY(0); opacity: 1; }
         }
-        @keyframes slideOut {
-          0% { transform: translateY(0); opacity: 1; }
-          100% { transform: translateY(-100px); opacity: 0; }
-        }
         .modal-enter {
           animation: popIn 0.5s ease-out;
-        }
-        .modal-exit {
-          animation: slideOut 0.5s ease-in forwards;
         }
       `}</style>
 
       {modal && (
-        <div style={{...styles.modalOverlay, ...{background: modal.type === "success" ? "rgba(236, 72, 153, 0.9)" : "rgba(251, 113, 133, 0.9)"}}} className="modal-enter">
+        <div style={styles.modalOverlay} className="modal-enter">
           <div style={styles.modalContent}>
             <h2 style={styles.modalText}>{modal.message}</h2>
           </div>
         </div>
       )}
 
-      <div style={styles.navbar}>
+      <div style={{...styles.navbar, ...(theme === "dark" ? styles.navbarDark : {})}}>
         <div style={styles.navContent}>
           <h1 style={styles.logo} className="sparkle-text">
             ✨ Task Manager ✨
           </h1>
           <div style={styles.navButtons}>
-            <button style={styles.themeBtn} onClick={toggleTheme}>
+            <button style={{...styles.themeBtn, ...(theme === "dark" ? styles.themeBtnDark : {})}} onClick={toggleTheme}>
               {theme === "light" ? "🌙 Dark" : "☀️ Light"}
             </button>
-            <button style={styles.logoutBtn} onClick={logout}>
+            <button style={{...styles.logoutBtn, ...(theme === "dark" ? styles.logoutBtnDark : {})}} onClick={logout}>
               Logout
             </button>
           </div>
@@ -231,29 +236,29 @@ export default function Home() {
       </div>
 
       <div style={styles.main}>
-        {error && <div style={styles.error}>{error}</div>}
+        {error && <div style={{...styles.error, ...(theme === "dark" ? styles.errorDark : {})}}>{error}</div>}
 
-        <form onSubmit={handleAddTask} style={styles.form}>
+        <form onSubmit={handleAddTask} style={{...styles.form, ...(theme === "dark" ? styles.formDark : {})}}>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>✨ Task Title</label>
+            <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>✨ Task Title</label>
             <input
               type="text"
               placeholder="What needs to be done?"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              style={styles.input}
+              style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
               required
             />
           </div>
 
           <div style={styles.inputGroup}>
-            <label style={styles.label}>📝 Description (optional)</label>
+            <label style={{...styles.label, ...(theme === "dark" ? styles.labelDark : {})}}>📝 Description (optional)</label>
             <input
               type="text"
               placeholder="Add a note..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              style={styles.input}
+              style={{...styles.input, ...(theme === "dark" ? styles.inputDark : {})}}
             />
           </div>
 
@@ -263,35 +268,44 @@ export default function Home() {
         </form>
 
         {loading ? (
-          <p style={styles.loading}>Loading your tasks... 💗</p>
+          <p style={{...styles.loading, ...(theme === "dark" ? styles.loadingDark : {})}}>Loading your tasks... 💗</p>
         ) : tasks.length === 0 ? (
-          <p style={styles.empty}>No tasks yet. Add one to get started! 🎀</p>
+          <p style={{...styles.empty, ...(theme === "dark" ? styles.emptyDark : {})}}>No tasks yet. Add one to get started! 🎀</p>
         ) : (
           <div style={styles.tasksList}>
             {tasks.map((task) => (
-              <div key={task._id} style={styles.taskCard}>
+              <div key={task._id} style={{...styles.taskCard, ...(theme === "dark" ? styles.taskCardDark : {})}}>
                 <div style={styles.taskContent}>
                   <h3 style={{
                     ...styles.taskTitle,
+                    ...(theme === "dark" ? styles.taskTitleDark : {}),
                     textDecoration: task.completed ? "line-through" : "none",
                     opacity: task.completed ? 0.6 : 1,
                   }}>
                     {task.completed ? "✓ " : "○ "} {task.title}
                   </h3>
                   {task.description && (
-                    <p style={styles.taskDesc}>{task.description}</p>
+                    <p style={{...styles.taskDesc, ...(theme === "dark" ? styles.taskDescDark : {})}}>{task.description}</p>
                   )}
                 </div>
                 <div style={styles.taskActions}>
                   <button
-                    onClick={() => toggleComplete(task._id, task.completed)}
-                    style={{...styles.doneBtn, ...(task.completed ? styles.doneBtnActive : {})}}
+                    onClick={() => markDone(task._id)}
+                    style={{...styles.doneBtn, ...(theme === "dark" ? styles.doneBtnDark : {})}}
+                    disabled={task.completed}
                   >
-                    {task.completed ? "✓ Done" : "○ Done"}
+                    ✓ Done
+                  </button>
+                  <button
+                    onClick={() => markNotDone(task._id)}
+                    style={{...styles.notDoneBtn, ...(theme === "dark" ? styles.notDoneBtnDark : {})}}
+                    disabled={!task.completed}
+                  >
+                    ○ Not Done
                   </button>
                   <button
                     onClick={() => deleteTask(task._id)}
-                    style={styles.deleteBtn}
+                    style={{...styles.deleteBtn, ...(theme === "dark" ? styles.deleteBtnDark : {})}}
                   >
                     ✕ Delete
                   </button>
@@ -309,6 +323,10 @@ const styles = {
   container: {
     minHeight: "100vh",
     background: "linear-gradient(135deg, #fff5fb 0%, #fce7f3 50%, #fbcfe8 100%)",
+    transition: "all 0.3s ease",
+  },
+  containerDark: {
+    background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
   },
   modalOverlay: {
     position: "fixed",
@@ -320,6 +338,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1000,
+    background: "rgba(236, 72, 153, 0.9)",
   },
   modalContent: {
     background: "white",
@@ -342,6 +361,11 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 100,
+    transition: "all 0.3s ease",
+  },
+  navbarDark: {
+    background: "linear-gradient(90deg, #0f3460 0%, #16213e 100%)",
+    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
   },
   navContent: {
     maxWidth: "1000px",
@@ -371,6 +395,11 @@ const styles = {
     fontWeight: "bold",
     transition: "all 0.3s ease",
   },
+  themeBtnDark: {
+    background: "rgba(251, 191, 36, 0.2)",
+    borderColor: "#fbbf24",
+    color: "#fbbf24",
+  },
   logoutBtn: {
     background: "rgba(255, 255, 255, 0.2)",
     border: "2px solid white",
@@ -381,6 +410,11 @@ const styles = {
     fontSize: "14px",
     fontWeight: "bold",
     transition: "all 0.3s ease",
+  },
+  logoutBtnDark: {
+    background: "rgba(251, 191, 36, 0.2)",
+    borderColor: "#fbbf24",
+    color: "#fbbf24",
   },
   main: {
     maxWidth: "900px",
@@ -395,6 +429,12 @@ const styles = {
     marginBottom: "20px",
     border: "2px solid #fca5a5",
     fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  errorDark: {
+    background: "rgba(239, 68, 68, 0.2)",
+    color: "#fca5a5",
+    borderColor: "#dc2626",
   },
   form: {
     background: "white",
@@ -403,6 +443,12 @@ const styles = {
     boxShadow: "0 10px 40px rgba(236, 72, 153, 0.15)",
     marginBottom: "30px",
     border: "3px solid #ec4899",
+    transition: "all 0.3s ease",
+  },
+  formDark: {
+    background: "#16213e",
+    border: "3px solid #0f3460",
+    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
   },
   inputGroup: {
     display: "flex",
@@ -414,6 +460,10 @@ const styles = {
     fontSize: "14px",
     fontWeight: "bold",
     color: "#ec4899",
+    transition: "all 0.3s ease",
+  },
+  labelDark: {
+    color: "#fbbf24",
   },
   input: {
     padding: "12px 16px",
@@ -422,7 +472,13 @@ const styles = {
     fontSize: "16px",
     outline: "none",
     backgroundColor: "#fff5fb",
+    color: "#1f2937",
     transition: "all 0.3s ease",
+  },
+  inputDark: {
+    border: "2px solid #0f3460",
+    backgroundColor: "#0f3460",
+    color: "#fbbf24",
   },
   submitBtn: {
     width: "100%",
@@ -442,12 +498,20 @@ const styles = {
     fontSize: "18px",
     color: "#ec4899",
     fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  loadingDark: {
+    color: "#fbbf24",
   },
   empty: {
     textAlign: "center",
     fontSize: "18px",
     color: "#db2777",
     fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  emptyDark: {
+    color: "#fbbf24",
   },
   tasksList: {
     display: "flex",
@@ -465,6 +529,11 @@ const styles = {
     border: "2px solid #fbcfe8",
     transition: "all 0.3s ease",
   },
+  taskCardDark: {
+    background: "#16213e",
+    border: "2px solid #0f3460",
+    boxShadow: "0 5px 20px rgba(0, 0, 0, 0.3)",
+  },
   taskContent: {
     flex: 1,
   },
@@ -473,9 +542,17 @@ const styles = {
     fontWeight: "bold",
     color: "#ec4899",
     marginBottom: "5px",
+    transition: "all 0.3s ease",
+  },
+  taskTitleDark: {
+    color: "#fbbf24",
   },
   taskDesc: {
     fontSize: "14px",
+    color: "#9ca3af",
+    transition: "all 0.3s ease",
+  },
+  taskDescDark: {
     color: "#9ca3af",
   },
   taskActions: {
@@ -492,9 +569,25 @@ const styles = {
     fontWeight: "bold",
     transition: "all 0.3s ease",
   },
-  doneBtnActive: {
-    background: "#ec4899",
-    color: "white",
+  doneBtnDark: {
+    background: "rgba(251, 191, 36, 0.1)",
+    color: "#fbbf24",
+    borderColor: "#fbbf24",
+  },
+  notDoneBtn: {
+    background: "rgba(59, 130, 246, 0.1)",
+    color: "#3b82f6",
+    border: "2px solid #3b82f6",
+    padding: "8px 14px",
+    borderRadius: "8px",
+    cursor: "pointer",
+    fontWeight: "bold",
+    transition: "all 0.3s ease",
+  },
+  notDoneBtnDark: {
+    background: "rgba(59, 130, 246, 0.2)",
+    color: "#60a5fa",
+    borderColor: "#60a5fa",
   },
   deleteBtn: {
     background: "#fee2e2",
@@ -505,5 +598,10 @@ const styles = {
     cursor: "pointer",
     fontWeight: "bold",
     transition: "all 0.3s ease",
+  },
+  deleteBtnDark: {
+    background: "rgba(239, 68, 68, 0.2)",
+    color: "#fca5a5",
+    borderColor: "#dc2626",
   },
 };
