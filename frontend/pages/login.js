@@ -137,7 +137,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   containerDark: {
-    background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+    background: "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #c4b5fd 100%)",
   },
   themeToggle: {
     position: "absolute",
@@ -156,8 +156,8 @@ const styles = {
     justifyContent: "center",
   },
   themeToggleDark: {
-    background: "rgba(251, 191, 36, 0.2)",
-    borderColor: "#fbbf24",
+    background: "rgba(139, 92, 246, 0.3)",
+    borderColor: "#7c3aed",
   },
   content: {
     width: "100%",
@@ -182,8 +182,8 @@ const styles = {
     transition: "all 0.3s ease",
   },
   cardDark: {
-    background: "#16213e",
-    border: "3px solid #0f3460",
+    background: "#f5f3ff",
+    border: "3px solid #a78bfa",
   },
   heading: {
     fontSize: "28px",
@@ -194,7 +194,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   headingDark: {
-    color: "#fbbf24",
+    color: "#6d28d9",
   },
   error: {
     background: "#fee2e2",
@@ -208,9 +208,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   errorDark: {
-    background: "rgba(239, 68, 68, 0.2)",
-    color: "#fca5a5",
-    borderColor: "#dc2626",
+    background: "#fce7f3",
+    color: "#9d174d",
+    borderColor: "#f0abfc",
   },
   form: {
     display: "flex",
@@ -229,7 +229,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   labelDark: {
-    color: "#fbbf24",
+    color: "#7c3aed",
   },
   input: {
     padding: "14px 16px",
@@ -243,9 +243,9 @@ const styles = {
     fontFamily: "inherit",
   },
   inputDark: {
-    border: "2px solid #0f3460",
-    backgroundColor: "#0f3460",
-    color: "#fbbf24",
+    border: "2px solid #c4b5fd",
+    backgroundColor: "#faf5ff",
+    color: "#4c1d95",
   },
   button: {
     padding: "16px",
@@ -279,7 +279,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   toggleBtnDark: {
-    color: "#fbbf24",
+    color: "#6d28d9",
   },
   test: {
     textAlign: "center",
@@ -291,6 +291,6 @@ const styles = {
     transition: "all 0.3s ease",
   },
   testDark: {
-    color: "rgba(251, 191, 36, 0.8)",
+    color: "rgba(109, 40, 217, 0.9)",
   },
 };

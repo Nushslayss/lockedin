@@ -99,7 +99,7 @@ export default function Home() {
   const handleAddTask = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
-    
+
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${API_URL}/api/tasks`, {
@@ -136,10 +136,10 @@ export default function Home() {
         body: JSON.stringify({ completed: true }),
       });
       if (!res.ok) throw new Error("Failed to update");
-      
+
       const randomMsg = MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)];
       showModal(randomMsg);
-      
+
       fetchTasks();
     } catch (err) {
       setError("Could not update task.");
@@ -158,10 +158,10 @@ export default function Home() {
         body: JSON.stringify({ completed: false }),
       });
       if (!res.ok) throw new Error("Failed to update");
-      
+
       const randomMsg = FAILURE_MESSAGES[Math.floor(Math.random() * FAILURE_MESSAGES.length)];
       showModal(randomMsg);
-      
+
       fetchTasks();
     } catch (err) {
       setError("Could not update task.");
@@ -326,7 +326,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   containerDark: {
-    background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)",
+    background: "linear-gradient(135deg, #ede9fe 0%, #ddd6fe 50%, #c4b5fd 100%)",
   },
   modalOverlay: {
     position: "fixed",
@@ -364,8 +364,8 @@ const styles = {
     transition: "all 0.3s ease",
   },
   navbarDark: {
-    background: "linear-gradient(90deg, #0f3460 0%, #16213e 100%)",
-    boxShadow: "0 10px 30px rgba(0, 0, 0, 0.5)",
+    background: "linear-gradient(90deg, #a78bfa 0%, #8b5cf6 100%)",
+    boxShadow: "0 10px 30px rgba(139, 92, 246, 0.35)",
   },
   navContent: {
     maxWidth: "1000px",
@@ -396,9 +396,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   themeBtnDark: {
-    background: "rgba(251, 191, 36, 0.2)",
-    borderColor: "#fbbf24",
-    color: "#fbbf24",
+    background: "rgba(255, 255, 255, 0.35)",
+    borderColor: "#5b21b6",
+    color: "#5b21b6",
   },
   logoutBtn: {
     background: "rgba(255, 255, 255, 0.2)",
@@ -412,9 +412,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   logoutBtnDark: {
-    background: "rgba(251, 191, 36, 0.2)",
-    borderColor: "#fbbf24",
-    color: "#fbbf24",
+    background: "rgba(255, 255, 255, 0.35)",
+    borderColor: "#5b21b6",
+    color: "#5b21b6",
   },
   main: {
     maxWidth: "900px",
@@ -432,9 +432,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   errorDark: {
-    background: "rgba(239, 68, 68, 0.2)",
-    color: "#fca5a5",
-    borderColor: "#dc2626",
+    background: "#fce7f3",
+    color: "#9d174d",
+    borderColor: "#f0abfc",
   },
   form: {
     background: "white",
@@ -446,9 +446,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   formDark: {
-    background: "#16213e",
-    border: "3px solid #0f3460",
-    boxShadow: "0 10px 40px rgba(0, 0, 0, 0.3)",
+    background: "#f5f3ff",
+    border: "3px solid #a78bfa",
+    boxShadow: "0 10px 40px rgba(139, 92, 246, 0.2)",
   },
   inputGroup: {
     display: "flex",
@@ -463,7 +463,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   labelDark: {
-    color: "#fbbf24",
+    color: "#7c3aed",
   },
   input: {
     padding: "12px 16px",
@@ -476,9 +476,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   inputDark: {
-    border: "2px solid #0f3460",
-    backgroundColor: "#0f3460",
-    color: "#fbbf24",
+    border: "2px solid #c4b5fd",
+    backgroundColor: "#faf5ff",
+    color: "#4c1d95",
   },
   submitBtn: {
     width: "100%",
@@ -501,7 +501,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   loadingDark: {
-    color: "#fbbf24",
+    color: "#7c3aed",
   },
   empty: {
     textAlign: "center",
@@ -511,7 +511,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   emptyDark: {
-    color: "#fbbf24",
+    color: "#7c3aed",
   },
   tasksList: {
     display: "flex",
@@ -530,9 +530,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskCardDark: {
-    background: "#16213e",
-    border: "2px solid #0f3460",
-    boxShadow: "0 5px 20px rgba(0, 0, 0, 0.3)",
+    background: "#f5f3ff",
+    border: "2px solid #c4b5fd",
+    boxShadow: "0 5px 20px rgba(139, 92, 246, 0.2)",
   },
   taskContent: {
     flex: 1,
@@ -545,7 +545,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskTitleDark: {
-    color: "#fbbf24",
+    color: "#6d28d9",
   },
   taskDesc: {
     fontSize: "14px",
@@ -553,7 +553,7 @@ const styles = {
     transition: "all 0.3s ease",
   },
   taskDescDark: {
-    color: "#9ca3af",
+    color: "#8b7bab",
   },
   taskActions: {
     display: "flex",
@@ -570,9 +570,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   doneBtnDark: {
-    background: "rgba(251, 191, 36, 0.1)",
-    color: "#fbbf24",
-    borderColor: "#fbbf24",
+    background: "rgba(139, 92, 246, 0.12)",
+    color: "#7c3aed",
+    borderColor: "#7c3aed",
   },
   notDoneBtn: {
     background: "rgba(59, 130, 246, 0.1)",
@@ -585,9 +585,9 @@ const styles = {
     transition: "all 0.3s ease",
   },
   notDoneBtnDark: {
-    background: "rgba(59, 130, 246, 0.2)",
-    color: "#60a5fa",
-    borderColor: "#60a5fa",
+    background: "rgba(99, 102, 241, 0.12)",
+    color: "#6366f1",
+    borderColor: "#6366f1",
   },
   deleteBtn: {
     background: "#fee2e2",
@@ -600,8 +600,8 @@ const styles = {
     transition: "all 0.3s ease",
   },
   deleteBtnDark: {
-    background: "rgba(239, 68, 68, 0.2)",
-    color: "#fca5a5",
-    borderColor: "#dc2626",
+    background: "#fce7f3",
+    color: "#be185d",
+    borderColor: "#f0abfc",
   },
 };
