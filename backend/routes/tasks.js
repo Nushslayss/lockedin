@@ -1,6 +1,7 @@
 import express from "express";
 import Task from "../models/Task.js";
 import { authenticate } from "../middleware.js";
+import { analyzeTask } from "../utils/aiAgent.js";
 
 const router = express.Router();
 
@@ -60,19 +61,30 @@ router.get("/by-priority", authenticate, async (req, res) => {
   }
 });
 
-// POST new task (with userId)
+// POST new task (with userId) — AI auto-assigns priority/subtasks if not provided
 router.post("/", authenticate, async (req, res) => {
   try {
     const { title, description, dueDate, priority, subtasks, tags } = req.body;
     if (!title) return res.status(400).json({ error: "Title required" });
+
+    let finalPriority = priority;
+    let finalSubtasks = subtasks || [];
+
+    if (!priority) {
+      const aiResult = await analyzeTask(title, description || "");
+      finalPriority = aiResult.priority;
+      if (!subtasks || subtasks.length === 0) {
+        finalSubtasks = aiResult.subtasks;
+      }
+    }
 
     const task = new Task({
       userId: req.userId,
       title,
       description,
       dueDate: dueDate || null,
-      priority: priority || "medium",
-      subtasks: subtasks || [],
+      priority: finalPriority || "medium",
+      subtasks: finalSubtasks,
       tags: tags || [],
     });
     const savedTask = await task.save();

@@ -3,10 +3,10 @@ import User from "../models/User.js";
 import jwt from "jsonwebtoken";
 
 const router = express.Router();
-const SECRET = "your-secret-key-123";
 
 router.post("/signup", async (req, res) => {
   try {
+    const SECRET = process.env.JWT_SECRET;
     const { email, password } = req.body;
     const user = new User({ email, password });
     const savedUser = await user.save();
@@ -19,6 +19,7 @@ router.post("/signup", async (req, res) => {
 
 router.post("/login", async (req, res) => {
   try {
+    const SECRET = process.env.JWT_SECRET;
     const { email, password } = req.body;
     const user = await User.findOne({ email });
     if (user && user.password === password) {
