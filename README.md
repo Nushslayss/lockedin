@@ -1,4 +1,4 @@
-# Task Manager
+# LOCKEDIN
 
 A full-stack Task Manager app for creating, tracking, and managing tasks — built with **Next.js**, **Tailwind CSS**, **Node.js**, **Express**, and **MongoDB**.
 
