@@ -70,13 +70,6 @@ export default function Home() {
       checkDueSoon(list);
     }
   };
-  const initialLoad = async () => {
-    const list = await fetchTasks();
-    if (!notifiedRef.current && list) {
-      notifiedRef.current = true;
-      checkDueSoon(list);
-    }
-  };
 
   const checkDueSoon = (list) => {
     const now = new Date();
