@@ -35,6 +35,8 @@ export default function Home() {
   const [toast, setToast] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editingField, setEditingField] = useState(null);
+  const [reschedulingId, setReschedulingId] = useState(null);
+  const [breakdownState, setBreakdownState] = useState({}); // { [messageIndex]: { checked: {i:bool}, dates: {i:str} } }
   const router = useRouter();
   const chatEndRef = useRef(null);
   const notifiedRef = useRef(false);
@@ -104,6 +106,14 @@ export default function Home() {
     fetchTasks();
   };
 
+  const addTaskDirect = async (title, priority, dueDate) => {
+    await fetch(`${API_URL}/api/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title, priority, dueDate: dueDate || null }),
+    });
+  };
+
   const setStatus = async (task, status) => {
     await fetch(`${API_URL}/api/tasks/${task._id}`, {
       method: "PATCH",
@@ -112,6 +122,17 @@ export default function Home() {
     });
     if (status === "done") showToast(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
     if (status === "failed") showToast(NOT_DONE_MESSAGES[Math.floor(Math.random() * NOT_DONE_MESSAGES.length)]);
+    fetchTasks();
+  };
+
+  const rescheduleTask = async (taskId, newDate) => {
+    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: "pending", completed: false, dueDate: newDate }),
+    });
+    setReschedulingId(null);
+    showToast("🔄 Rescheduled! Back in the game.");
     fetchTasks();
   };
 
@@ -148,7 +169,13 @@ export default function Home() {
         body: JSON.stringify({ message: text, history: historyToSend }),
       });
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!", askType: data.askType, taskOptions: data.taskOptions }]);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: data.reply || "Done!",
+        askType: data.askType,
+        taskOptions: data.taskOptions,
+        breakdownItems: data.breakdownItems,
+      }]);
       if (data.tasksChanged) fetchTasks();
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Hmm, something glitched. Try again?" }]);
@@ -162,6 +189,44 @@ export default function Home() {
       if (task) await setStatus(task, "done");
     }
     setMessages((prev) => [...prev, { role: "assistant", text: `Got it — "${opt.title}" ${kind === "delete" ? "deleted" : "marked done"}! ✨` }]);
+  };
+
+  // ---- Breakdown checklist helpers ----
+  const toggleBreakdownCheck = (msgIndex, itemIndex) => {
+    setBreakdownState((prev) => {
+      const current = prev[msgIndex] || { checked: {}, dates: {} };
+      return {
+        ...prev,
+        [msgIndex]: { ...current, checked: { ...current.checked, [itemIndex]: !current.checked[itemIndex] } },
+      };
+    });
+  };
+
+  const setBreakdownDate = (msgIndex, itemIndex, date) => {
+    setBreakdownState((prev) => {
+      const current = prev[msgIndex] || { checked: {}, dates: {} };
+      return {
+        ...prev,
+        [msgIndex]: { ...current, dates: { ...current.dates, [itemIndex]: date } },
+      };
+    });
+  };
+
+  const confirmBreakdown = async (msgIndex, items) => {
+    const state = breakdownState[msgIndex] || { checked: {}, dates: {} };
+    const selected = items.filter((_, i) => state.checked[i]);
+    if (selected.length === 0) {
+      showToast("Tick at least one subtask first ✔️");
+      return;
+    }
+    await Promise.all(
+      items.map((item, i) =>
+        state.checked[i] ? addTaskDirect(item.title, item.priority, state.dates[i] || item.dueDate) : null
+      )
+    );
+    showToast(`✨ Added ${selected.length} task${selected.length > 1 ? "s" : ""}!`);
+    setMessages((prev) => prev.map((m, i) => (i === msgIndex ? { ...m, breakdownItems: null, breakdownDone: true } : m)));
+    fetchTasks();
   };
 
   const sortedTasks = [...tasks].sort((a, b) => {
@@ -241,9 +306,32 @@ export default function Home() {
                   </span>
                 )}
 
-                <button onClick={() => setStatus(task, "done")} style={{ ...styles.rowBtn, color: task.status === "done" ? "#5fd68a" : "var(--text-dim)" }}>✓ Done</button>
-                <button onClick={() => setStatus(task, "failed")} style={{ ...styles.rowBtn, color: task.status === "failed" ? "#a08" : "var(--text-dim)" }}>○ Not done</button>
-                <button onClick={() => deleteTask(task._id)} style={{ ...styles.rowBtn, color: "#ff5f5f" }}>🗑️</button>
+                {task.status === "failed" ? (
+                  reschedulingId === task._id ? (
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="date"
+                        autoFocus
+                        onChange={(e) => e.target.value && rescheduleTask(task._id, e.target.value)}
+                        style={styles.inlineSelect}
+                      />
+                      <button onClick={() => setReschedulingId(null)} style={{ ...styles.rowBtn, color: "var(--text-dim)" }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => setReschedulingId(task._id)} style={{ ...styles.rowBtn, color: "var(--primary-strong)" }}>
+                        🔄 Reschedule
+                      </button>
+                      <button onClick={() => deleteTask(task._id)} style={{ ...styles.rowBtn, color: "#ff5f5f" }}>✕</button>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    <button onClick={() => setStatus(task, "done")} style={{ ...styles.rowBtn, color: task.status === "done" ? "#5fd68a" : "var(--text-dim)" }}>✓ Done</button>
+                    <button onClick={() => setStatus(task, "failed")} style={{ ...styles.rowBtn, color: "var(--text-dim)" }}>○ Not done</button>
+                    <button onClick={() => deleteTask(task._id)} style={{ ...styles.rowBtn, color: "#ff5f5f" }}>🗑️</button>
+                  </>
+                )}
               </div>
             ))}
           </div>
@@ -279,6 +367,52 @@ export default function Home() {
                     <button onClick={() => chatDatePick && sendChat(`Due on ${chatDatePick}`)} style={styles.pillBtn}>Set date</button>
                   </div>
                 </div>
+              )}
+
+              {m.askType === "breakdown" && (
+                <div style={styles.pillRow}>
+                  <button onClick={() => sendChat("Yes, break it down")} style={styles.pillBtn}>Yes, split it up</button>
+                  <button onClick={() => sendChat("No, just add it as one task")} style={styles.pillBtn}>No, keep it one task</button>
+                </div>
+              )}
+
+              {m.breakdownItems && m.breakdownItems.length > 0 && (
+                <div style={styles.breakdownList}>
+                  {m.breakdownItems.map((item, itemIdx) => {
+                    const state = breakdownState[i] || { checked: {}, dates: {} };
+                    return (
+                      <div key={itemIdx} style={styles.breakdownRow}>
+                        <input
+                          type="checkbox"
+                          checked={!!state.checked[itemIdx]}
+                          onChange={() => toggleBreakdownCheck(i, itemIdx)}
+                          style={{ width: 18, height: 18 }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[item.priority || "medium"], fontSize: 9 }}>
+                            {(item.priority || "medium").toUpperCase()}
+                          </span>
+                          <p style={{ margin: "4px 0 0 0", fontFamily: "Quicksand", fontWeight: 600, fontSize: 14 }}>{item.title}</p>
+                        </div>
+                        <input
+                          type="date"
+                          defaultValue={toInputDate(item.dueDate)}
+                          onChange={(e) => setBreakdownDate(i, itemIdx, e.target.value)}
+                          style={styles.inlineSelect}
+                        />
+                      </div>
+                    );
+                  })}
+                  <button onClick={() => confirmBreakdown(i, m.breakdownItems)} style={styles.doneBtn}>
+                    ✔ Done — Add Selected
+                  </button>
+                </div>
+              )}
+
+              {m.breakdownDone && (
+                <p style={{ fontFamily: "Quicksand", fontSize: 13, color: "var(--text-dim)", fontStyle: "italic" }}>
+                  Added to your list! ✨
+                </p>
               )}
 
               {m.taskOptions && (
@@ -345,6 +479,9 @@ const styles = {
   optionList: { display: "flex", flexDirection: "column", gap: 8, width: "100%" },
   optionCard: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: "10px 14px" },
   miniBtn: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, width: 32, height: 32, cursor: "pointer", fontSize: 14 },
+  breakdownList: { display: "flex", flexDirection: "column", gap: 8, width: "100%", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 },
+  breakdownRow: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", borderRadius: 12, padding: "8px 10px" },
+  doneBtn: { marginTop: 6, padding: "10px 16px", borderRadius: 999, border: "none", background: "linear-gradient(90deg, var(--primary-strong), var(--primary))", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   chatInputRow: { display: "flex", gap: 10, padding: 18, borderTop: "1px solid var(--border)" },
   chatInput: { flex: 1, padding: "14px 18px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 15, outline: "none" },
   chatSend: { width: 48, height: 48, borderRadius: "50%", border: "none", background: "var(--primary)", color: "#fff", fontSize: 20, cursor: "pointer" },

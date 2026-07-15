@@ -25,40 +25,37 @@ The user's current tasks (JSON): ${JSON.stringify(taskSummary)}.
 Respond ONLY with valid JSON, no extra text, in this exact shape:
 {
   "reply": "your message to the user",
-  "action": "create" | "delete" | "split" | "complete" | "breakdown" | "none",
+  "action": "create" | "delete" | "split" | "complete" | "none",
   "taskId": "id if deleting/splitting/completing a specific known task",
   "taskTitle": "title if creating a single task",
   "priority": "low" | "medium" | "high" | null,
   "dueDate": "YYYY-MM-DD" | null,
   "subtasks": [{"title":"...", "priority":"low|medium|high", "dueDate":"YYYY-MM-DD or null"}] or null,
-  "breakdownTitle": "the big/vague goal name, if action is breakdown",
-  "askType": "priority" | "date" | "breakdown" | null,
+  "askType": "priority" | "date" | "breakdown" | "breakdownList" | null,
   "taskOptions": [{"id":"...","title":"...","priority":"...","dueDate":"..."}] or null
 }
 
 TASK CREATION FLOW (single, clear task):
 - When the user names something specific they want to do, first ask for priority. Set askType:"priority". action:"none".
 - Once priority is known, ask for the due date. Set askType:"date". action:"none".
-- The user might click a quick option OR type an exact date directly (e.g. "2026-07-25", "25 July", "next Monday") — always parse whatever they typed into dueDate yourself.
-- If they say "you decide", pick a sensible date based on priority (high = soon, low = relaxed).
-- Once priority AND a due date decision are both known (from this message or earlier in history), use action "create" immediately in that same turn. Never ask again.
+- Parse any date format the user types (e.g. "2026-07-25", "25 July", "next Monday") into dueDate yourself.
+- If they say "you decide", pick a sensible date based on priority.
+- Once priority AND due date are both known, use action "create" immediately. Never ask again.
 - Never repeat a question already answered in the conversation history.
 
-BREAKDOWN FLOW (big/vague goal that should become MULTIPLE separate tasks):
-- If the user names a big or vague goal (e.g. "plan a wedding", "launch my website", "move apartments"), ask: "Want me to break this into separate tasks?" Set askType:"breakdown", action:"none", breakdownTitle set to the goal.
-- If the user confirms yes, generate 4-8 concrete, actionable subtasks. Each needs its own sensible priority and dueDate (spread across a reasonable timeline based on today's date). Respond with action:"breakdown" and fill the subtasks array. Do not ask again.
-- If the user says no, just create it as ONE single task instead (go through the normal single-task create flow using breakdownTitle as taskTitle).
-- Never confuse this with "split" (below) — breakdown creates NEW independent tasks in the list; split adds sub-checklist items INSIDE one existing task.
+BREAKDOWN FLOW (big/vague goal → multiple subtasks):
+- If the user names a big/vague goal (e.g. "plan a wedding", "launch my website"), ask: "Want me to break this into separate tasks?" Set askType:"breakdown", action:"none".
+- If they confirm yes, generate 4-8 concrete subtasks, each with its own priority and a sensible dueDate (spread across a realistic timeline from today). Set askType:"breakdownList", action:"none", and fill subtasks. Do NOT set action to "create" — the user will confirm which ones to keep in the app UI. Just present them.
+- If they say no, treat it as a normal single task instead (go through the single-task create flow).
 
 SPLITTING (checklist inside ONE existing task):
-- Only use this when the user asks to split/break down a task that ALREADY exists in their list (match by name/taskId), and they want a checklist within it, not new list items.
-- action:"split", return taskId and a subtasks array of plain strings.
+- Only for an existing task, when the user wants a checklist inside it. action:"split", return taskId and a plain-string subtasks array.
 
 DELETING OR COMPLETING:
 - If the task is clearly named, act directly with its taskId.
 - If unclear, set action:"none", askType:null, and taskOptions to the full task list so the user can pick visually.
 
-GENERAL CONVERSATION: if unrelated to tasks, just answer helpfully and naturally. action:"none", askType:null, taskOptions:null.`;
+GENERAL CONVERSATION: if unrelated to tasks, answer helpfully and naturally. action:"none", askType:null, taskOptions:null.`;
 
     const historyMessages = Array.isArray(history)
       ? history.filter((m) => m.role === "user" || m.role === "assistant").slice(-16).map((m) => ({ role: m.role, content: m.text }))
@@ -96,21 +93,6 @@ GENERAL CONVERSATION: if unrelated to tasks, just answer helpfully and naturally
       tasksChanged = true;
     }
 
-    if (parsed.action === "breakdown" && Array.isArray(parsed.subtasks) && parsed.subtasks.length) {
-      await Promise.all(
-        parsed.subtasks.map((st) => {
-          const t = new Task({
-            userId: req.userId,
-            title: st.title,
-            priority: validPriority(st.priority),
-            dueDate: validDate(st.dueDate),
-          });
-          return t.save();
-        })
-      );
-      tasksChanged = true;
-    }
-
     if (parsed.action === "delete" && parsed.taskId) {
       await Task.findOneAndDelete({ _id: parsed.taskId, userId: req.userId });
       tasksChanged = true;
@@ -138,11 +120,22 @@ GENERAL CONVERSATION: if unrelated to tasks, just answer helpfully and naturally
       }
     }
 
+    // Breakdown list — just clean/validate, do NOT save to DB yet
+    let breakdownItems = null;
+    if (parsed.askType === "breakdownList" && Array.isArray(parsed.subtasks)) {
+      breakdownItems = parsed.subtasks.map((st) => ({
+        title: st.title,
+        priority: validPriority(st.priority),
+        dueDate: validDate(st.dueDate),
+      }));
+    }
+
     res.json({
       reply: parsed.reply || "Done!",
       tasksChanged,
       askType: parsed.askType || null,
       taskOptions: parsed.taskOptions || null,
+      breakdownItems,
     });
   } catch (err) {
     console.error("Chat error:", err.message);
