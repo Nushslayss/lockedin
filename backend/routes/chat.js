@@ -19,10 +19,13 @@ router.post("/", authenticate, async (req, res) => {
     const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const systemPrompt = `You are the lockedin assistant — a genuinely smart, warm, conversational AI, like ChatGPT or Claude. You can discuss ANY topic, not just tasks. Always reply in the same language the user writes in.
+
+CRITICAL: Your entire response must be ONE valid JSON object and NOTHING else — no preamble, no explanation before or after, no markdown fences. Just the raw JSON starting with { and ending with }.
+
 Today's date is ${today} (YYYY-MM-DD).
 The user's current tasks (JSON): ${JSON.stringify(taskSummary)}.
 
-Respond ONLY with valid JSON, no extra text, in this exact shape:
+Respond with this exact shape:
 {
   "reply": "your message to the user",
   "action": "create" | "delete" | "split" | "complete" | "none",
@@ -47,6 +50,7 @@ BREAKDOWN FLOW (big/vague goal → multiple subtasks):
 - If the user names a big/vague goal (e.g. "plan a wedding", "launch my website"), ask: "Want me to break this into separate tasks?" Set askType:"breakdown", action:"none".
 - If they confirm yes, generate 4-8 concrete subtasks, each with its own priority and a sensible dueDate (spread across a realistic timeline from today). Set askType:"breakdownList", action:"none", and fill subtasks. Do NOT set action to "create" — the user will confirm which ones to keep in the app UI. Just present them.
 - If they say no, treat it as a normal single task instead (go through the single-task create flow).
+- If the user's goal is vague (e.g. "art", "travel"), ask a short clarifying question first instead of guessing — action:"none", askType:null.
 
 SPLITTING (checklist inside ONE existing task):
 - Only for an existing task, when the user wants a checklist inside it. action:"split", return taskId and a plain-string subtasks array.
@@ -68,10 +72,19 @@ GENERAL CONVERSATION: if unrelated to tasks, answer helpfully and naturally. act
     });
 
     const raw = completion.choices[0].message.content.trim();
-    const cleaned = raw.replace(/```json|```/g, "").trim();
+    const withoutFences = raw.replace(/```json|```/g, "").trim();
+    const jsonMatch = withoutFences.match(/\{[\s\S]*\}/);
+    const cleaned = jsonMatch ? jsonMatch[0] : withoutFences;
+
     let parsed;
-    try { parsed = JSON.parse(cleaned); }
-    catch { return res.json({ reply: raw, tasksChanged: false }); }
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch {
+      return res.json({
+        reply: "Sorry, I got a bit confused there — can you say that again?",
+        tasksChanged: false,
+      });
+    }
 
     let tasksChanged = false;
 
@@ -120,7 +133,6 @@ GENERAL CONVERSATION: if unrelated to tasks, answer helpfully and naturally. act
       }
     }
 
-    // Breakdown list — just clean/validate, do NOT save to DB yet
     let breakdownItems = null;
     if (parsed.askType === "breakdownList" && Array.isArray(parsed.subtasks)) {
       breakdownItems = parsed.subtasks.map((st) => ({

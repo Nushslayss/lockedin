@@ -33,10 +33,13 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatDatePick, setChatDatePick] = useState("");
   const [toast, setToast] = useState(null);
+  const [bigMessage, setBigMessage] = useState(null); // { text, type: "success" | "fail" }
   const [editingId, setEditingId] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [reschedulingId, setReschedulingId] = useState(null);
-  const [breakdownState, setBreakdownState] = useState({}); // { [messageIndex]: { checked: {i:bool}, dates: {i:str} } }
+  const [breakdownState, setBreakdownState] = useState({}); // { [messageIndex]: { checked, dates, priorities } }
+  const [customSubtask, setCustomSubtask] = useState({}); // { [msgIndex]: { title, priority, dueDate } }
+  const [customAdded, setCustomAdded] = useState({}); // { [msgIndex]: [ {title, priority, dueDate} ] }
   const router = useRouter();
   const chatEndRef = useRef(null);
   const notifiedRef = useRef(false);
@@ -60,6 +63,13 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", newTheme);
   };
 
+  const initialLoad = async () => {
+    const list = await fetchTasks();
+    if (!notifiedRef.current && list) {
+      notifiedRef.current = true;
+      checkDueSoon(list);
+    }
+  };
   const initialLoad = async () => {
     const list = await fetchTasks();
     if (!notifiedRef.current && list) {
@@ -91,6 +101,11 @@ export default function Home() {
 
   const showToast = (text) => { setToast(text); setTimeout(() => setToast(null), 2800); };
 
+  const showBigMessage = (text, type) => {
+    setBigMessage({ text, type });
+    setTimeout(() => setBigMessage(null), 4200);
+  };
+
   const addTask = async (e) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -120,8 +135,8 @@ export default function Home() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status, completed: status === "done" }),
     });
-    if (status === "done") showToast(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
-    if (status === "failed") showToast(NOT_DONE_MESSAGES[Math.floor(Math.random() * NOT_DONE_MESSAGES.length)]);
+    if (status === "done") showBigMessage(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)], "success");
+    if (status === "failed") showBigMessage(NOT_DONE_MESSAGES[Math.floor(Math.random() * NOT_DONE_MESSAGES.length)], "fail");
     fetchTasks();
   };
 
@@ -145,14 +160,6 @@ export default function Home() {
     setEditingId(null); setEditingField(null);
     fetchTasks();
   };
-
-  const deleteTask = async (id, skipConfirm) => {
-    if (!skipConfirm && !window.confirm("Delete this task? This can't be undone.")) return;
-    await fetch(`${API_URL}/api/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-    showToast("🗑️ Deleted!");
-    fetchTasks();
-  };
-
   const logout = () => { localStorage.removeItem("token"); router.push("/login"); };
 
   const sendChat = async (textOverride) => {
@@ -194,7 +201,7 @@ export default function Home() {
   // ---- Breakdown checklist helpers ----
   const toggleBreakdownCheck = (msgIndex, itemIndex) => {
     setBreakdownState((prev) => {
-      const current = prev[msgIndex] || { checked: {}, dates: {} };
+      const current = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
       return {
         ...prev,
         [msgIndex]: { ...current, checked: { ...current.checked, [itemIndex]: !current.checked[itemIndex] } },
@@ -204,7 +211,7 @@ export default function Home() {
 
   const setBreakdownDate = (msgIndex, itemIndex, date) => {
     setBreakdownState((prev) => {
-      const current = prev[msgIndex] || { checked: {}, dates: {} };
+      const current = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
       return {
         ...prev,
         [msgIndex]: { ...current, dates: { ...current.dates, [itemIndex]: date } },
@@ -212,20 +219,66 @@ export default function Home() {
     });
   };
 
-  const confirmBreakdown = async (msgIndex, items) => {
-    const state = breakdownState[msgIndex] || { checked: {}, dates: {} };
-    const selected = items.filter((_, i) => state.checked[i]);
-    if (selected.length === 0) {
-      showToast("Tick at least one subtask first ✔️");
+  const setBreakdownPriority = (msgIndex, itemIndex, priority) => {
+    setBreakdownState((prev) => {
+      const current = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+      return {
+        ...prev,
+        [msgIndex]: { ...current, priorities: { ...current.priorities, [itemIndex]: priority } },
+      };
+    });
+  };
+
+  // ---- Custom subtask helpers ----
+  const updateCustomSubtask = (msgIndex, field, value) => {
+    setCustomSubtask((prev) => ({
+      ...prev,
+      [msgIndex]: { ...(prev[msgIndex] || { title: "", priority: "medium", dueDate: "" }), [field]: value },
+    }));
+  };
+
+  const addCustomSubtaskToList = (msgIndex) => {
+    const draft = customSubtask[msgIndex];
+    if (!draft || !draft.title || !draft.title.trim()) {
+      showToast("Type a subtask title first ✍️");
       return;
     }
-    await Promise.all(
-      items.map((item, i) =>
-        state.checked[i] ? addTaskDirect(item.title, item.priority, state.dates[i] || item.dueDate) : null
-      )
-    );
-    showToast(`✨ Added ${selected.length} task${selected.length > 1 ? "s" : ""}!`);
-    setMessages((prev) => prev.map((m, i) => (i === msgIndex ? { ...m, breakdownItems: null, breakdownDone: true } : m)));
+    setCustomAdded((prev) => ({
+      ...prev,
+      [msgIndex]: [...(prev[msgIndex] || []), { title: draft.title.trim(), priority: draft.priority || "medium", dueDate: draft.dueDate || null }],
+    }));
+    setCustomSubtask((prev) => ({ ...prev, [msgIndex]: { title: "", priority: "medium", dueDate: "" } }));
+  };
+
+  const removeCustomSubtask = (msgIndex, idx) => {
+    setCustomAdded((prev) => ({
+      ...prev,
+      [msgIndex]: (prev[msgIndex] || []).filter((_, i) => i !== idx),
+    }));
+  };
+  const confirmBreakdown = async (msgIndex, items) => {
+    const state = breakdownState[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+    const selectedAiItems = items.filter((_, i) => state.checked[i]);
+    const customItems = customAdded[msgIndex] || [];
+    const totalSelected = selectedAiItems.length + customItems.length;
+
+    if (totalSelected === 0) {
+      showToast("Tick at least one subtask, or add your own ✔️");
+      return;
+    }
+
+    await Promise.all([
+      ...items.map((item, i) =>
+        state.checked[i]
+          ? addTaskDirect(item.title, state.priorities[i] || item.priority, state.dates[i] || item.dueDate)
+          : null
+      ),
+      ...customItems.map((item) => addTaskDirect(item.title, item.priority, item.dueDate)),
+    ]);
+
+    showToast(`✨ Added ${totalSelected} task${totalSelected > 1 ? "s" : ""}!`);
+    setMessages((prev) => prev.map((m, idx) => (idx === msgIndex ? { ...m, breakdownItems: null, breakdownDone: true } : m)));
+    setCustomAdded((prev) => ({ ...prev, [msgIndex]: [] }));
     fetchTasks();
   };
 
@@ -242,6 +295,40 @@ export default function Home() {
   return (
     <div style={styles.wrap}>
       {toast && <div style={styles.toast}>{toast}</div>}
+
+      {bigMessage && (
+        <div style={{
+          ...styles.bigOverlay,
+          background: bigMessage.type === "success"
+            ? "radial-gradient(circle at 50% 40%, var(--primary-strong), var(--primary) 60%, #1a0b12 100%)"
+            : "radial-gradient(circle at 50% 40%, var(--surface-2), var(--surface) 60%, #0b0b0f 100%)",
+        }}>
+          <div style={styles.sparkleLayer}>
+            {Array.from({ length: 24 }).map((_, i) => (
+              <span key={i} style={{
+                ...styles.sparkle,
+                top: `${Math.random() * 100}%`,
+                left: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 1.5}s`,
+                fontSize: `${10 + Math.random() * 18}px`,
+              }}>✨</span>
+            ))}
+          </div>
+          <p style={styles.bigMessageText}>{bigMessage.text}</p>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes sparkleFloat {
+          0% { opacity: 0; transform: translateY(0) scale(0.6); }
+          50% { opacity: 1; transform: translateY(-14px) scale(1); }
+          100% { opacity: 0; transform: translateY(-28px) scale(0.6); }
+        }
+        @keyframes bigMessageIn {
+          0% { opacity: 0; transform: scale(0.85); }
+          100% { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
 
       <div style={styles.mainCol}>
         <header style={styles.header}>
@@ -337,7 +424,6 @@ export default function Home() {
           </div>
         )}
       </div>
-
       <div style={styles.chatPanel}>
         <div style={styles.chatHeader}>✨ lockedin assistant</div>
         <div style={styles.chatBody}>
@@ -379,7 +465,8 @@ export default function Home() {
               {m.breakdownItems && m.breakdownItems.length > 0 && (
                 <div style={styles.breakdownList}>
                   {m.breakdownItems.map((item, itemIdx) => {
-                    const state = breakdownState[i] || { checked: {}, dates: {} };
+                    const state = breakdownState[i] || { checked: {}, dates: {}, priorities: {} };
+                    const currentPriority = state.priorities[itemIdx] || item.priority || "medium";
                     return (
                       <div key={itemIdx} style={styles.breakdownRow}>
                         <input
@@ -389,9 +476,21 @@ export default function Home() {
                           style={{ width: 18, height: 18 }}
                         />
                         <div style={{ flex: 1 }}>
-                          <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[item.priority || "medium"], fontSize: 9 }}>
-                            {(item.priority || "medium").toUpperCase()}
-                          </span>
+                          <select
+                            value={currentPriority}
+                            onChange={(e) => setBreakdownPriority(i, itemIdx, e.target.value)}
+                            style={{
+                              ...styles.priorityBadge,
+                              background: PRIORITY_COLOR[currentPriority],
+                              border: "none",
+                              fontSize: 9,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <option value="low">LOW</option>
+                            <option value="medium">MEDIUM</option>
+                            <option value="high">HIGH</option>
+                          </select>
                           <p style={{ margin: "4px 0 0 0", fontFamily: "Quicksand", fontWeight: 600, fontSize: 14 }}>{item.title}</p>
                         </div>
                         <input
@@ -403,6 +502,48 @@ export default function Home() {
                       </div>
                     );
                   })}
+
+                  {/* Custom subtasks the user has added manually */}
+                  {(customAdded[i] || []).map((item, idx) => (
+                    <div key={`custom-${idx}`} style={{ ...styles.breakdownRow, border: "1px dashed var(--primary)" }}>
+                      <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[item.priority || "medium"], fontSize: 9 }}>
+                        {(item.priority || "medium").toUpperCase()}
+                      </span>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ margin: 0, fontFamily: "Quicksand", fontWeight: 600, fontSize: 14 }}>{item.title}</p>
+                        <p style={{ margin: 0, fontFamily: "Poppins", fontSize: 11, color: "var(--text-dim)" }}>{formatDate(item.dueDate)}</p>
+                      </div>
+                      <button onClick={() => removeCustomSubtask(i, idx)} style={{ ...styles.miniBtn, color: "#ff5f5f" }}>✕</button>
+                    </div>
+                  ))}
+
+                  {/* Add-your-own subtask row */}
+                  <div style={styles.customAddRow}>
+                    <input
+                      type="text"
+                      placeholder="Add your own subtask..."
+                      value={(customSubtask[i] && customSubtask[i].title) || ""}
+                      onChange={(e) => updateCustomSubtask(i, "title", e.target.value)}
+                      style={styles.customAddInput}
+                    />
+                    <select
+                      value={(customSubtask[i] && customSubtask[i].priority) || "medium"}
+                      onChange={(e) => updateCustomSubtask(i, "priority", e.target.value)}
+                      style={styles.inlineSelect}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <input
+                      type="date"
+                      value={(customSubtask[i] && customSubtask[i].dueDate) || ""}
+                      onChange={(e) => updateCustomSubtask(i, "dueDate", e.target.value)}
+                      style={styles.inlineSelect}
+                    />
+                    <button onClick={() => addCustomSubtaskToList(i)} style={styles.customAddBtn}>+ Add</button>
+                  </div>
+
                   <button onClick={() => confirmBreakdown(i, m.breakdownItems)} style={styles.doneBtn}>
                     ✔ Done — Add Selected
                   </button>
@@ -453,6 +594,37 @@ const styles = {
   wrap: { minHeight: "100vh", display: "flex", flexWrap: "wrap" },
   mainCol: { flex: "1 1 500px", padding: "24px 24px 60px" },
   toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: "var(--primary)", color: "#fff", padding: "14px 24px", borderRadius: 999, fontFamily: "Quicksand", fontWeight: 700, fontSize: 16, zIndex: 300, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", maxWidth: "90%", textAlign: "center" },
+  bigOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "40px",
+    animation: "bigMessageIn 0.35s ease",
+  },
+  sparkleLayer: {
+    position: "absolute",
+    inset: 0,
+    overflow: "hidden",
+    pointerEvents: "none",
+  },
+  sparkle: {
+    position: "absolute",
+    animation: "sparkleFloat 1.8s ease-in-out infinite",
+  },
+  bigMessageText: {
+    position: "relative",
+    zIndex: 2,
+    color: "#fff",
+    fontFamily: "Quicksand",
+    fontWeight: 800,
+    fontSize: "clamp(24px, 5vw, 42px)",
+    textAlign: "center",
+    maxWidth: "800px",
+    textShadow: "0 4px 20px rgba(0,0,0,0.35)",
+  },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
   iconBtn: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "50%", width: 46, height: 46, fontSize: 20, cursor: "pointer" },
   logoutBtn: { background: "transparent", border: "1px solid var(--border)", borderRadius: 999, padding: "10px 18px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 15, color: "var(--text-dim)", cursor: "pointer" },
@@ -481,6 +653,9 @@ const styles = {
   miniBtn: { background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 10, width: 32, height: 32, cursor: "pointer", fontSize: 14 },
   breakdownList: { display: "flex", flexDirection: "column", gap: 8, width: "100%", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 },
   breakdownRow: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", borderRadius: 12, padding: "8px 10px" },
+  customAddRow: { display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", background: "var(--surface)", borderRadius: 12, padding: "10px", border: "1px dashed var(--border)" },
+  customAddInput: { flex: "1 1 120px", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 13, outline: "none" },
+  customAddBtn: { padding: "8px 14px", borderRadius: 10, border: "none", background: "var(--primary)", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" },
   doneBtn: { marginTop: 6, padding: "10px 16px", borderRadius: 999, border: "none", background: "linear-gradient(90deg, var(--primary-strong), var(--primary))", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 14, cursor: "pointer" },
   chatInputRow: { display: "flex", gap: 10, padding: 18, borderTop: "1px solid var(--border)" },
   chatInput: { flex: 1, padding: "14px 18px", borderRadius: 999, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--text)", fontFamily: "Poppins", fontSize: 15, outline: "none" },

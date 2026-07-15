@@ -14,14 +14,13 @@ const taskSchema = new mongoose.Schema(
     title: { type: String, required: true, trim: true },
     description: { type: String, default: "" },
     completed: { type: Boolean, default: false },
-
-    // New fields for AI features
-    dueDate: { type: Date, default: null },
-    priority: {
+    status: {
       type: String,
-      enum: ["low", "medium", "high"],
-      default: "medium",
+      enum: ["pending", "done", "failed"],
+      default: "pending",
     },
+    dueDate: { type: Date, default: null },
+    priority: { type: String, enum: ["low", "medium", "high"], default: "medium" },
     subtasks: [subtaskSchema],
     tags: [{ type: String, trim: true }],
   },
