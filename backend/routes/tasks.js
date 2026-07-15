@@ -77,6 +77,15 @@ router.post("/", authenticate, async (req, res) => {
         finalSubtasks = aiResult.subtasks;
       }
     }
+    // GET soft-deleted tasks
+router.get("/deleted", authenticate, async (req, res) => {
+  try {
+    const tasks = await Task.find({ userId: req.userId, status: "deleted" }).sort({ deletedAt: -1 });
+    res.json(tasks);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
     const task = new Task({
       userId: req.userId,

@@ -281,6 +281,21 @@ export default function Home() {
     if (!b.dueDate) return -1;
     return new Date(a.dueDate) - new Date(b.dueDate);
   });
+  const [confirmModal, setConfirmModal] = useState(null);
+
+  const deleteTask = (task) => setConfirmModal(task);
+
+  const confirmSoftDelete = async () => {
+    if (!confirmModal) return;
+    await fetch(`${API_URL}/api/tasks/${confirmModal._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: "deleted", deletedAt: new Date().toISOString() }),
+    });
+    showToast("🗑️ Moved to deleted");
+    setConfirmModal(null);
+    fetchTasks();
+  };
 
   const formatDate = (d) => !d ? "No due date" : new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const toInputDate = (d) => d ? new Date(d).toISOString().split("T")[0] : "";

@@ -16,9 +16,10 @@ const taskSchema = new mongoose.Schema(
     completed: { type: Boolean, default: false },
     status: {
       type: String,
-      enum: ["pending", "done", "failed"],
+      enum: ["pending", "done", "failed", "deleted"],
       default: "pending",
     },
+    deletedAt: { type: Date, default: null },
     dueDate: { type: Date, default: null },
     priority: { type: String, enum: ["low", "medium", "high"], default: "medium" },
     subtasks: [subtaskSchema],
