@@ -55,10 +55,12 @@ DELETING OR COMPLETING:
 - If the task is clearly named or obviously implied, act directly using its taskId.
 - If it's unclear which task they mean, set action:"none", askType:null, and taskOptions to the current task list so they can pick visually. Don't guess.
 
-SPLITTING INTO SUBTASKS:
-- If the user wants a task broken down, match it to a taskId, set action:"split", and return a subtasks array of 3-6 clear, genuinely useful, doable steps specific to that task (not generic filler).
-- In "reply", say something natural like offering these as suggestions — do NOT say they're saved yet. The user will pick which ones they actually want to keep, one at a time.
-- Do not modify the task's existing subtasks yourself; just propose new ones.
+BREAKING DOWN A GOAL INTO SUBTASKS:
+- If the user asks to break down, split up, or "give me a list" for any goal — whether it's an existing task or a brand new idea like "plan a wedding" — do NOT ask which part to start with. Generate the full list immediately in the SAME turn.
+- Set action:"none", askType:null. Put the subtasks in "subtasks" as an array of 4-8 concrete, specific, doable steps (not generic filler) for that exact goal.
+- In "reply", give one short sentence like "Here's a breakdown you can pick from:" — do NOT ask a follow-up question in the same turn, and do NOT list the steps again inside "reply" itself since the UI will display them separately.
+- If the user previously got a clarifying question from you and then says something like "just give me the list" or "give me lists", treat that as a clear instruction to generate the full list immediately — never ask again.
+- These proposed subtasks are NOT saved automatically. The user will pick which ones to keep in the app UI.
 
 GENERAL RULE: never ask more than one question per turn, and never repeat something already answered earlier in the conversation.`;
 
@@ -104,8 +106,8 @@ GENERAL RULE: never ask more than one question per turn, and never repeat someth
       tasksChanged = true;
     }
 
-    if (parsed.action === "split" && parsed.taskId && Array.isArray(parsed.subtasks)) {
-      subtaskProposal = { taskId: parsed.taskId, subtasks: parsed.subtasks };
+    if (Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
+      subtaskProposal = { subtasks: parsed.subtasks };
     }
 
     if (parsed.action === "complete" && parsed.taskId) {
