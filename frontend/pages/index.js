@@ -39,6 +39,9 @@ export default function Home() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [fullScreenMsg, setFullScreenMsg] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [subtaskState, setSubtaskState] = useState({});
+  const [customSubtask, setCustomSubtask] = useState({});
+  const [customAdded, setCustomAdded] = useState({});
   const router = useRouter();
   const chatEndRef = useRef(null);
   const notifiedRef = useRef(false);
@@ -198,6 +201,78 @@ export default function Home() {
       });
       fetchTasks();
     }
+    const toggleSubtaskCheck = (msgIndex, i) => {
+  setSubtaskState((prev) => {
+    const cur = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+    return { ...prev, [msgIndex]: { ...cur, checked: { ...cur.checked, [i]: !cur.checked[i] } } };
+  });
+};
+
+const setSubtaskDate = (msgIndex, i, date) => {
+  setSubtaskState((prev) => {
+    const cur = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+    return { ...prev, [msgIndex]: { ...cur, dates: { ...cur.dates, [i]: date } } };
+  });
+};
+
+const setSubtaskPriority = (msgIndex, i, priority) => {
+  setSubtaskState((prev) => {
+    const cur = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+    return { ...prev, [msgIndex]: { ...cur, priorities: { ...cur.priorities, [i]: priority } } };
+  });
+};
+
+const updateCustomSubtask = (msgIndex, field, value) => {
+  setCustomSubtask((prev) => ({
+    ...prev,
+    [msgIndex]: { ...(prev[msgIndex] || { title: "", priority: "medium", dueDate: "" }), [field]: value },
+  }));
+};
+
+const addCustomSubtaskToList = (msgIndex) => {
+  const draft = customSubtask[msgIndex];
+  if (!draft || !draft.title?.trim()) return;
+  setCustomAdded((prev) => ({
+    ...prev,
+    [msgIndex]: [...(prev[msgIndex] || []), { title: draft.title.trim(), priority: draft.priority || "medium", dueDate: draft.dueDate || null }],
+  }));
+  setCustomSubtask((prev) => ({ ...prev, [msgIndex]: { title: "", priority: "medium", dueDate: "" } }));
+};
+
+const removeCustomSubtask = (msgIndex, i) => {
+  setCustomAdded((prev) => ({ ...prev, [msgIndex]: (prev[msgIndex] || []).filter((_, idx) => idx !== i) }));
+};
+
+const confirmSubtasks = async (msgIndex, subtasks) => {
+  const state = subtaskState[msgIndex] || { checked: {}, dates: {}, priorities: {} };
+  const selected = subtasks.filter((_, i) => state.checked[i]);
+  const custom = customAdded[msgIndex] || [];
+  const total = selected.length + custom.length;
+  if (total === 0) return;
+
+  await Promise.all([
+    ...subtasks.map((title, i) =>
+      state.checked[i]
+        ? fetch(`${API_URL}/api/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ title, priority: state.priorities[i] || "medium", dueDate: state.dates[i] || null }),
+          })
+        : null
+    ),
+    ...custom.map((item) =>
+      fetch(`${API_URL}/api/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: item.title, priority: item.priority, dueDate: item.dueDate }),
+      })
+    ),
+  ]);
+
+  setMessages((prev) => prev.map((m, idx) => (idx === msgIndex ? { ...m, subtaskProposal: null, subtaskDone: true } : m)));
+  setCustomAdded((prev) => ({ ...prev, [msgIndex]: [] }));
+  fetchTasks();
+};
     if (kind === "done") {
       const task = tasks.find((t) => t._id === opt.id);
       if (task) await markDone(task);
@@ -383,6 +458,56 @@ export default function Home() {
                   ))}
                 </div>
               )}
+              {m.subtaskProposal && m.subtaskProposal.subtasks && (
+  <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
+    {m.subtaskProposal.subtasks.map((title, idx) => {
+      const state = subtaskState[i] || { checked: {}, dates: {}, priorities: {} };
+      const priority = state.priorities[idx] || "medium";
+      return (
+        <div key={idx} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", borderRadius: 12, padding: "8px 10px" }}>
+          <input type="checkbox" checked={!!state.checked[idx]} onChange={() => toggleSubtaskCheck(i, idx)} style={{ width: 18, height: 18 }} />
+          <div style={{ flex: 1 }}>
+            <select value={priority} onChange={(e) => setSubtaskPriority(i, idx, e.target.value)}
+              style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[priority], border: "none", fontSize: 9, cursor: "pointer" }}>
+              <option value="low">LOW</option>
+              <option value="medium">MEDIUM</option>
+              <option value="high">HIGH</option>
+            </select>
+            <p style={{ margin: "4px 0 0 0", fontFamily: "Quicksand", fontWeight: 600, fontSize: 14 }}>{title}</p>
+          </div>
+          <input type="date" onChange={(e) => setSubtaskDate(i, idx, e.target.value)} style={styles.inlineSelect} />
+        </div>
+      );
+    })}
+
+    {(customAdded[i] || []).map((item, idx) => (
+      <div key={`c-${idx}`} style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", borderRadius: 12, padding: "8px 10px", border: "1px dashed var(--primary)" }}>
+        <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[item.priority], fontSize: 9 }}>{item.priority.toUpperCase()}</span>
+        <span style={{ flex: 1, fontFamily: "Quicksand", fontWeight: 600, fontSize: 14 }}>{item.title}</span>
+        <button onClick={() => removeCustomSubtask(i, idx)} style={{ ...styles.miniBtn, color: "#ff5f5f" }}>✕</button>
+      </div>
+    ))}
+
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: "var(--surface)", borderRadius: 12, padding: 10, border: "1px dashed var(--border)" }}>
+      <input type="text" placeholder="Add your own subtask..." value={customSubtask[i]?.title || ""}
+        onChange={(e) => updateCustomSubtask(i, "title", e.target.value)}
+        style={{ flex: "1 1 120px", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", fontFamily: "Poppins", fontSize: 13 }} />
+      <select value={customSubtask[i]?.priority || "medium"} onChange={(e) => updateCustomSubtask(i, "priority", e.target.value)} style={styles.inlineSelect}>
+        <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+      </select>
+      <input type="date" value={customSubtask[i]?.dueDate || ""} onChange={(e) => updateCustomSubtask(i, "dueDate", e.target.value)} style={styles.inlineSelect} />
+      <button onClick={() => addCustomSubtaskToList(i)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "var(--primary)", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>+ Add</button>
+    </div>
+
+    <button onClick={() => confirmSubtasks(i, m.subtaskProposal.subtasks)} style={styles.doneBtn}>
+      ✔ Done — Add Selected
+    </button>
+  </div>
+)}
+
+{m.subtaskDone && (
+  <p style={{ fontFamily: "Quicksand", fontSize: 13, color: "var(--text-dim)", fontStyle: "italic" }}>Added to your list! ✨</p>
+)}
             </div>
           ))}
           {chatLoading && <div style={{ ...styles.chatBubble, background: "var(--surface-2)", alignSelf: "flex-start" }}>typing...</div>}
