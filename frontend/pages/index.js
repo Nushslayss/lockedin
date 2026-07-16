@@ -39,6 +39,7 @@ export default function Home() {
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [fullScreenMsg, setFullScreenMsg] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [expandedId, setExpandedId] = useState(null);
   const [subtaskState, setSubtaskState] = useState({});
   const [customSubtask, setCustomSubtask] = useState({});
   const [customAdded, setCustomAdded] = useState({});
@@ -47,6 +48,7 @@ export default function Home() {
   const notifiedRef = useRef(false);
   const menuRef = useRef(null);
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme") || "light";
@@ -354,6 +356,14 @@ const confirmSubtasks = async (msgIndex, subtasks) => {
                 filter: task.status === "failed" ? "grayscale(0.6)" : "none",
                 opacity: task.status === "done" ? 0.6 : 1,
               }}>
+                {task.subtasks && task.subtasks.length > 0 && (
+  <button
+    onClick={() => setExpandedId(expandedId === task._id ? null : task._id)}
+    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text-dim)" }}
+  >
+    {expandedId === task._id ? "▼" : "▶"}
+  </button>
+)}
                 {editingId === task._id && editingField === "priority" ? (
                   <select autoFocus defaultValue={task.priority} onBlur={(e) => updateField(task._id, "priority", e.target.value)}
                     onChange={(e) => updateField(task._id, "priority", e.target.value)} style={styles.inlineSelect}>

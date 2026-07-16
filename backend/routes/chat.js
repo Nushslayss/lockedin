@@ -100,6 +100,17 @@ GENERAL RULE: never ask more than one question per turn, and never repeat someth
       await task.save();
       tasksChanged = true;
     }
+    if (parsed.action === "create" && parsed.taskTitle && Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
+  const task = new Task({
+    userId: req.userId,
+    title: parsed.taskTitle,
+    priority: ["low", "medium", "high"].includes(parsed.priority) ? parsed.priority : "medium",
+    dueDate: parsed.dueDate || null,
+    subtasks: parsed.subtasks.map((title) => ({ title, completed: false })),
+  });
+  await task.save();
+  tasksChanged = true;
+}
 
     if (parsed.action === "delete" && parsed.taskId) {
       await Task.findOneAndDelete({ _id: parsed.taskId, userId: req.userId });
