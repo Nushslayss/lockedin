@@ -143,15 +143,16 @@ export default function Home() {
   const deleteTask = (task) => setConfirmModal(task);
 
   const confirmSoftDelete = async () => {
-    if (!confirmModal) return;
-    await fetch(`${API_URL}/api/tasks/${confirmModal._id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status: "deleted", deletedAt: new Date().toISOString() }),
-    });
-    setConfirmModal(null);
-    fetchTasks();
-  };
+  if (!confirmModal) return;
+  const taskId = confirmModal._id;
+  setTasks((prev) => prev.filter((t) => t._id !== taskId)); // instant UI removal
+  setConfirmModal(null);
+  await fetch(`${API_URL}/api/tasks/${taskId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ status: "deleted", deletedAt: new Date().toISOString() }),
+  });
+};
 
   const confirmReschedule = async (withDate) => {
     const body = withDate && rescheduleDate ? { status: "pending", dueDate: rescheduleDate } : { status: "failed" };

@@ -4,120 +4,137 @@ import { useRouter } from "next/router";
 const API_URL = "https://lockedinbackend.up.railway.app";
 const PRIORITY_COLOR = { high: "#ff5f5f", medium: "#ffb648", low: "#5fd68a" };
 
-export default function Deleted() {
-  const [theme, setTheme] = useState("light");
+export default function DeletedTasks() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [rescheduling, setRescheduling] = useState(null);
-  const [newDate, setNewDate] = useState("");
-  const [confirmForever, setConfirmForever] = useState(null);
+  const [reschedulingId, setReschedulingId] = useState(null);
   const router = useRouter();
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("theme") || "light";
-    setTheme(savedTheme);
-    document.documentElement.setAttribute("data-theme", savedTheme);
     if (!token) { router.push("/login"); return; }
     fetchDeleted();
   }, []);
 
   const fetchDeleted = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/tasks/deleted`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/tasks`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      setTasks(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data.filter((t) => t.status === "deleted") : [];
+      setTasks(list);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
-  const reschedule = async (id) => {
-    if (!newDate) return;
+  // Restore with the task's existing date, no changes
+  const restoreTask = async (id) => {
+    setTasks((prev) => prev.filter((t) => t._id !== id));
     await fetch(`${API_URL}/api/tasks/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status: "pending", dueDate: newDate, deletedAt: null }),
+      body: JSON.stringify({ status: "pending" }),
     });
-    setRescheduling(null); setNewDate("");
-    fetchDeleted();
   };
 
-  const deleteForever = async (id) => {
-    await fetch(`${API_URL}/api/tasks/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
-    setConfirmForever(null);
-    fetchDeleted();
+  // Restore AND push to a new due date at the same time
+  const rescheduleAndRestore = async (id, newDate) => {
+    setTasks((prev) => prev.filter((t) => t._id !== id));
+    setReschedulingId(null);
+    await fetch(`${API_URL}/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ status: "pending", dueDate: newDate }),
+    });
+  };
+
+  const permanentDelete = async (id) => {
+    setTasks((prev) => prev.filter((t) => t._id !== id));
+    await fetch(`${API_URL}/api/tasks/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
   };
 
   const formatDate = (d) => !d ? "No due date" : new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <span className="wordmark" style={{ fontSize: "2.4rem" }}>lockedin</span>
-        <button onClick={() => router.push("/")} style={styles.backBtn}>← Back to tasks</button>
-      </header>
-
-      <h2 style={{ fontFamily: "Quicksand", color: "var(--text)", textAlign: "center" }}>🗑️ Deleted tasks</h2>
+    <div style={{ padding: 24, maxWidth: 700, margin: "0 auto" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+        <span className="wordmark" style={{ fontSize: "2rem" }}>Deleted tasks</span>
+        <button
+          onClick={() => router.push("/")}
+          style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 999, padding: "10px 18px", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer" }}
+        >
+          ← Back
+        </button>
+      </div>
 
       {loading ? (
-        <p style={styles.emptyText}>Loading...</p>
+        <p style={{ fontFamily: "Quicksand", color: "var(--text-dim)" }}>Loading...</p>
       ) : tasks.length === 0 ? (
-        <p style={styles.emptyText}>Nothing here — your deleted tasks will show up in this list.</p>
+        <p style={{ fontFamily: "Quicksand", color: "var(--text-dim)" }}>Nothing here — deleted tasks show up in this list.</p>
       ) : (
-        <div style={styles.list}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {tasks.map((task) => (
-            <div key={task._id} style={styles.row}>
-              <span style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[task.priority || "medium"] }}>
+            <div key={task._id} style={{
+              display: "flex", alignItems: "center", gap: 14,
+              border: "1px solid var(--border)", borderRadius: 16, padding: "16px 18px",
+              background: "var(--surface)", flexWrap: "wrap",
+            }}>
+              <span style={{
+                background: PRIORITY_COLOR[task.priority || "medium"], color: "#fff",
+                fontFamily: "Quicksand", fontWeight: 700, fontSize: 12, padding: "5px 12px", borderRadius: 999,
+              }}>
                 {(task.priority || "medium").toUpperCase()}
               </span>
-              <span style={styles.rowTitle}>{task.title}</span>
-              <span style={styles.rowDate}>was due: {formatDate(task.dueDate)}</span>
+              <span style={{ flex: 1, fontFamily: "Quicksand", fontWeight: 700, fontSize: 16, minWidth: 140 }}>
+                {task.title}
+              </span>
+              <span style={{ fontFamily: "Poppins", fontSize: 13, color: "var(--text-dim)" }}>
+                {formatDate(task.dueDate)}
+              </span>
 
-              {rescheduling === task._id ? (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} style={styles.dateInput} />
-                  <button onClick={() => reschedule(task._id)} style={styles.rowBtn}>Save</button>
+              {reschedulingId === task._id ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="date"
+                    autoFocus
+                    onChange={(e) => e.target.value && rescheduleAndRestore(task._id, e.target.value)}
+                    style={{ padding: "6px 10px", borderRadius: 10, border: "1px solid var(--border)", fontFamily: "Quicksand", fontSize: 13 }}
+                  />
+                  <button
+                    onClick={() => setReschedulingId(null)}
+                    style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 12, padding: "8px 14px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               ) : (
-                <button onClick={() => { setRescheduling(task._id); setNewDate(""); }} style={styles.rowBtn}>↺ Reschedule</button>
+                <>
+                  <button
+                    onClick={() => restoreTask(task._id)}
+                    style={{ background: "var(--primary)", color: "#fff", border: "none", borderRadius: 12, padding: "8px 14px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  >
+                    ↩ Restore
+                  </button>
+                  <button
+                    onClick={() => setReschedulingId(task._id)}
+                    style={{ background: "var(--surface-2)", border: "1px solid var(--primary)", color: "var(--primary-strong)", borderRadius: 12, padding: "8px 14px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  >
+                    🔄 Reschedule
+                  </button>
+                  <button
+                    onClick={() => permanentDelete(task._id)}
+                    style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "#ff5f5f", borderRadius: 12, padding: "8px 14px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                  >
+                    🗑️ Delete forever
+                  </button>
+                </>
               )}
-
-              <button onClick={() => setConfirmForever(task)} style={{ ...styles.rowBtn, color: "#ff5f5f" }}>Delete forever</button>
             </div>
           ))}
-        </div>
-      )}
-
-      {confirmForever && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalCard}>
-            <p style={{ fontFamily: "Quicksand", fontWeight: 700, fontSize: 17, margin: "0 0 8px" }}>Delete forever?</p>
-            <p style={{ fontFamily: "Poppins", fontSize: 14, color: "var(--text-dim)", margin: "0 0 20px" }}>"{confirmForever.title}" will be permanently removed. This can't be undone.</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setConfirmForever(null)} style={styles.modalCancelBtn}>Cancel</button>
-              <button onClick={() => deleteForever(confirmForever._id)} style={styles.modalDeleteBtn}>Delete forever</button>
-            </div>
-          </div>
         </div>
       )}
     </div>
   );
 }
-
-const styles = {
-  page: { minHeight: "100vh", padding: "24px" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
-  backBtn: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 999, padding: "10px 18px", fontFamily: "Quicksand", fontWeight: 700, color: "var(--text)", cursor: "pointer" },
-  emptyText: { color: "var(--text-dim)", fontFamily: "Quicksand", fontSize: 16, textAlign: "center", marginTop: 60 },
-  list: { maxWidth: 700, margin: "20px auto 0", display: "flex", flexDirection: "column", gap: 12 },
-  row: { display: "flex", alignItems: "center", gap: 12, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: "14px 16px", flexWrap: "wrap" },
-  priorityBadge: { color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 11, padding: "4px 10px", borderRadius: 999 },
-  rowTitle: { flex: 1, fontFamily: "Quicksand", fontWeight: 700, fontSize: 15, color: "var(--text)", minWidth: 120 },
-  rowDate: { fontFamily: "Poppins", fontSize: 12, color: "var(--text-dim)" },
-  rowBtn: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "8px 12px", fontFamily: "Quicksand", fontWeight: 700, fontSize: 12, cursor: "pointer" },
-  dateInput: { padding: "6px 10px", borderRadius: 10, border: "1px solid var(--border)", fontFamily: "Quicksand", fontSize: 12 },
-  modalOverlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 400 },
-  modalCard: { background: "var(--surface)", borderRadius: 20, padding: 24, maxWidth: 340, width: "90%" },
-  modalCancelBtn: { flex: 1, padding: "12px 0", borderRadius: 12, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer" },
-  modalDeleteBtn: { flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: "#ff5f5f", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer" },
-};
