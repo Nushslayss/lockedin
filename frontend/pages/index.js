@@ -182,7 +182,7 @@ export default function Home() {
         body: JSON.stringify({ message: text, history: historyToSend }),
       });
      const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!", askType: data.askType, taskOptions: data.taskOptions }]);
+      setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!", askType: data.askType, taskOptions: data.taskOptions, subtaskProposal: data.subtaskProposal }]);
       if (data.tasksChanged) fetchTasks();
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Hmm, something glitched. Try again?" }]);
