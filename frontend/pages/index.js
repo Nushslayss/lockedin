@@ -32,10 +32,12 @@ export default function Home() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatDatePick, setChatDatePick] = useState("");
-  const [toast, setToast] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editingField, setEditingField] = useState(null);
   const [confirmModal, setConfirmModal] = useState(null);
+  const [rescheduleTask, setRescheduleTask] = useState(null);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [fullScreenMsg, setFullScreenMsg] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const router = useRouter();
   const chatEndRef = useRef(null);
@@ -98,7 +100,10 @@ export default function Home() {
     finally { setLoading(false); }
   };
 
-  const showToast = (text) => { setToast(text); setTimeout(() => setToast(null), 2800); };
+  const showFullScreen = (text, kind) => {
+    setFullScreenMsg({ text, kind });
+    setTimeout(() => setFullScreenMsg(null), 2800);
+  };
 
   const addTask = async (e) => {
     e.preventDefault();
@@ -115,16 +120,16 @@ export default function Home() {
     fetchTasks();
   };
 
-  const setStatus = async (task, status) => {
+  const markDone = async (task) => {
     await fetch(`${API_URL}/api/tasks/${task._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status, completed: status === "done" }),
+      body: JSON.stringify({ status: "done", completed: true }),
     });
-    if (status === "done") showToast(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)]);
-    if (status === "failed") showToast(NOT_DONE_MESSAGES[Math.floor(Math.random() * NOT_DONE_MESSAGES.length)]);
+    showFullScreen(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)], "success");
     fetchTasks();
   };
+
   const updateField = async (taskId, field, value) => {
     await fetch(`${API_URL}/api/tasks/${taskId}`, {
       method: "PATCH",
@@ -144,8 +149,19 @@ export default function Home() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ status: "deleted", deletedAt: new Date().toISOString() }),
     });
-    showToast("🗑️ Moved to deleted");
     setConfirmModal(null);
+    fetchTasks();
+  };
+
+  const confirmReschedule = async (withDate) => {
+    const body = withDate && rescheduleDate ? { status: "pending", dueDate: rescheduleDate } : { status: "failed" };
+    await fetch(`${API_URL}/api/tasks/${rescheduleTask._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    });
+    setRescheduleTask(null); setRescheduleDate("");
+    showFullScreen(NOT_DONE_MESSAGES[Math.floor(Math.random() * NOT_DONE_MESSAGES.length)], "failure");
     fetchTasks();
   };
 
@@ -164,7 +180,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ message: text, history: historyToSend }),
       });
-      const data = await res.json();
+     const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!", askType: data.askType, taskOptions: data.taskOptions }]);
       if (data.tasksChanged) fetchTasks();
     } catch {
@@ -183,7 +199,7 @@ export default function Home() {
     }
     if (kind === "done") {
       const task = tasks.find((t) => t._id === opt.id);
-      if (task) await setStatus(task, "done");
+      if (task) await markDone(task);
     }
     setMessages((prev) => [...prev, { role: "assistant", text: `Got it — "${opt.title}" ${kind === "delete" ? "moved to deleted" : "marked done"}! ✨` }]);
   };
@@ -198,9 +214,24 @@ export default function Home() {
   const formatDate = (d) => !d ? "No due date" : new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const toInputDate = (d) => d ? new Date(d).toISOString().split("T")[0] : "";
 
+  const sparklePositions = [
+    { top: "10%", left: "8%" }, { top: "18%", left: "85%" }, { top: "75%", left: "12%" },
+    { top: "85%", left: "80%" }, { top: "45%", left: "5%" }, { top: "50%", left: "92%" },
+    { top: "8%", left: "50%" }, { top: "90%", left: "45%" },
+  ];
+
   return (
     <div style={styles.wrap}>
-      {toast && <div style={styles.toast}>{toast}</div>}
+      {fullScreenMsg && (
+        <div style={styles.fullScreenOverlay} onClick={() => setFullScreenMsg(null)}>
+          {sparklePositions.map((pos, i) => (
+            <span key={i} className="sparkle" style={{ ...pos, position: "absolute", fontSize: "2rem", animationDelay: `${i * 0.15}s`, color: "#fff" }}>
+              {fullScreenMsg.kind === "success" ? "✨" : "💫"}
+            </span>
+          ))}
+          <p style={styles.fullScreenText}>{fullScreenMsg.text}</p>
+        </div>
+      )}
 
       <div style={styles.mainCol}>
         <header style={styles.header}>
@@ -274,7 +305,7 @@ export default function Home() {
                 )}
 
                 <button
-                  onClick={() => setStatus(task, "done")}
+                  onClick={() => markDone(task)}
                   style={{
                     ...styles.rowBtn,
                     color: task.status === "done" ? "#fff" : "var(--text-dim)",
@@ -285,7 +316,7 @@ export default function Home() {
                   ✓ Done
                 </button>
                 <button
-                  onClick={() => setStatus(task, "failed")}
+                  onClick={() => setRescheduleTask(task)}
                   style={{
                     ...styles.rowBtn,
                     color: task.status === "failed" ? "#fff" : "var(--text-dim)",
@@ -301,8 +332,7 @@ export default function Home() {
           </div>
         )}
       </div>
-
-      <div style={styles.chatPanel}>
+       <div style={styles.chatPanel}>
         <div style={styles.chatHeader}>✨ lockedin assistant</div>
         <div style={styles.chatBody}>
           {messages.map((m, i) => (
@@ -310,6 +340,7 @@ export default function Home() {
               <div style={{ ...styles.chatBubble, background: m.role === "user" ? "var(--primary)" : "var(--surface-2)", color: m.role === "user" ? "#fff" : "var(--text)" }}>
                 {m.text}
               </div>
+
               {m.askType === "priority" && (
                 <div style={styles.pillRow}>
                   {["Low", "Medium", "High"].map((p) => (
@@ -375,6 +406,20 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {rescheduleTask && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalCard}>
+            <p style={{ fontFamily: "Quicksand", fontWeight: 700, fontSize: 17, margin: "0 0 8px" }}>Reschedule "{rescheduleTask.title}"?</p>
+            <p style={{ fontFamily: "Poppins", fontSize: 14, color: "var(--text-dim)", margin: "0 0 16px" }}>Pick a new due date, or just mark it not done for now.</p>
+            <input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} style={{ ...styles.addSelect, marginBottom: 16, width: "100%" }} />
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => confirmReschedule(false)} style={styles.modalCancelBtn}>Just mark not done</button>
+              <button onClick={() => confirmReschedule(true)} style={styles.modalDeleteBtn} disabled={!rescheduleDate}>Reschedule</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -382,7 +427,6 @@ export default function Home() {
 const styles = {
   wrap: { minHeight: "100vh", display: "flex", flexWrap: "wrap" },
   mainCol: { flex: "1 1 500px", padding: "24px 24px 60px" },
-  toast: { position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", background: "var(--primary)", color: "#fff", padding: "14px 24px", borderRadius: 999, fontFamily: "Quicksand", fontWeight: 700, fontSize: 16, zIndex: 300, boxShadow: "0 8px 24px rgba(0,0,0,0.25)", maxWidth: "90%", textAlign: "center" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28 },
   iconBtn: { background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: "50%", width: 46, height: 46, fontSize: 20, cursor: "pointer" },
   dropdown: { position: "absolute", top: 54, right: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, boxShadow: "0 8px 28px rgba(0,0,0,0.18)", overflow: "hidden", minWidth: 190, zIndex: 250 },
@@ -417,4 +461,16 @@ const styles = {
   modalCard: { background: "var(--surface)", borderRadius: 20, padding: 24, maxWidth: 340, width: "90%" },
   modalCancelBtn: { flex: 1, padding: "12px 0", borderRadius: 12, border: "1px solid var(--border)", background: "transparent", color: "var(--text)", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer" },
   modalDeleteBtn: { flex: 1, padding: "12px 0", borderRadius: 12, border: "none", background: "#ff5f5f", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, cursor: "pointer" },
+  fullScreenOverlay: {
+    position: "fixed", inset: 0, zIndex: 500,
+    display: "flex", alignItems: "center", justifyContent: "center",
+    background: "linear-gradient(135deg, var(--primary-strong), var(--primary))",
+    animation: "fadeIn 0.3s ease", cursor: "pointer", padding: 40, textAlign: "center",
+    overflow: "hidden",
+  },
+  fullScreenText: {
+    fontFamily: "Quicksand", fontWeight: 800, fontSize: "2.4rem", color: "#fff",
+    lineHeight: 1.4, maxWidth: 700, position: "relative", zIndex: 1,
+    textShadow: "0 4px 20px rgba(0,0,0,0.2)",
+  },
 };
