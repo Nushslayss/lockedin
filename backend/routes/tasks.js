@@ -5,7 +5,16 @@ import { analyzeTask } from "../utils/aiAgent.js";
 
 const router = express.Router();
 
-// GET tasks (only for logged-in user, excludes soft-deleted)
+// Converts any "" (empty string) dueDate to null so Mongoose never tries to
+// cast an empty string into a Date and blow up the whole save.
+function sanitizeSubtasks(subtasks) {
+  if (!Array.isArray(subtasks)) return subtasks;
+  return subtasks.map((s) => ({
+    ...s,
+    dueDate: s.dueDate === "" ? null : s.dueDate,
+  }));
+}
+
 router.get("/", authenticate, async (req, res) => {
   try {
     const tasks = await Task.find({ userId: req.userId, status: { $ne: "deleted" } }).sort({ createdAt: -1 });
@@ -15,8 +24,6 @@ router.get("/", authenticate, async (req, res) => {
   }
 });
 
-// GET soft-deleted tasks
-// NOTE: this used to be nested (and unreachable) inside the POST "/" handler — moved out here.
 router.get("/deleted", authenticate, async (req, res) => {
   try {
     const tasks = await Task.find({ userId: req.userId, status: "deleted" }).sort({ deletedAt: -1 });
@@ -26,7 +33,6 @@ router.get("/deleted", authenticate, async (req, res) => {
   }
 });
 
-// GET tasks grouped by day (Today / Tomorrow / This Week / Later / No Date)
 router.get("/grouped-by-day", authenticate, async (req, res) => {
   try {
     const tasks = await Task.find({ userId: req.userId, status: { $ne: "deleted" } }).sort({ dueDate: 1 });
@@ -60,7 +66,6 @@ router.get("/grouped-by-day", authenticate, async (req, res) => {
   }
 });
 
-// GET tasks grouped by priority (High / Medium / Low)
 router.get("/by-priority", authenticate, async (req, res) => {
   try {
     const tasks = await Task.find({ userId: req.userId, status: { $ne: "deleted" } }).sort({ dueDate: 1 });
@@ -72,10 +77,6 @@ router.get("/by-priority", authenticate, async (req, res) => {
   }
 });
 
-// POST new task — AI auto-assigns priority if not provided.
-// IMPORTANT: subtasks are NEVER auto-generated/embedded here anymore.
-// They only get attached once the user explicitly confirms them in the UI
-// (either through the chat "pick which subtasks" flow, or the manual "+ Add" on a task).
 router.post("/", authenticate, async (req, res) => {
   try {
     const { title, description, dueDate, priority, subtasks, tags } = req.body;
@@ -92,9 +93,9 @@ router.post("/", authenticate, async (req, res) => {
       userId: req.userId,
       title,
       description,
-      dueDate: dueDate || null,
+      dueDate: dueDate === "" ? null : dueDate || null,
       priority: finalPriority || "medium",
-      subtasks: Array.isArray(subtasks) ? subtasks : [],
+      subtasks: sanitizeSubtasks(Array.isArray(subtasks) ? subtasks : []),
       tags: tags || [],
     });
     const savedTask = await task.save();
@@ -104,20 +105,21 @@ router.post("/", authenticate, async (req, res) => {
   }
 });
 
-// PATCH update task — also cascades Done/Not-done onto embedded subtasks,
-// unless the caller already sent an explicit subtasks array (e.g. from a
-// subtask-level edit), in which case we respect that instead.
 router.patch("/:id", authenticate, async (req, res) => {
   try {
     const task = await Task.findOne({ _id: req.params.id, userId: req.userId });
     if (!task) return res.status(404).json({ error: "Task not found" });
 
-    Object.assign(task, req.body);
+    const body = { ...req.body };
+    if (body.dueDate === "") body.dueDate = null;
+    if (Array.isArray(body.subtasks)) body.subtasks = sanitizeSubtasks(body.subtasks);
 
-    if (!req.body.subtasks && task.subtasks && task.subtasks.length > 0) {
-      if (req.body.status === "done") {
+    Object.assign(task, body);
+
+    if (!body.subtasks && task.subtasks && task.subtasks.length > 0) {
+      if (body.status === "done") {
         task.subtasks.forEach((s) => (s.completed = true));
-      } else if (req.body.status === "failed") {
+      } else if (body.status === "failed") {
         task.subtasks.forEach((s) => (s.completed = false));
       }
     }
@@ -125,11 +127,11 @@ router.patch("/:id", authenticate, async (req, res) => {
     await task.save();
     res.json(task);
   } catch (err) {
+    console.error("PATCH /tasks/:id error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// DELETE task (hard delete — used by the permanent-delete action on the Deleted page)
 router.delete("/:id", authenticate, async (req, res) => {
   try {
     const task = await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId });

@@ -61,8 +61,6 @@ export default function Home() {
     if (!token) { router.push("/login"); return; }
     initialLoad();
 
-    // Load persisted chat history so it survives reloads/navigation.
-    // Only cleared on logout (see logout()).
     const savedChat = localStorage.getItem("lockedin_chat_history");
     if (savedChat) {
       try {
@@ -78,12 +76,12 @@ export default function Home() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  // Persist chat history any time it changes.
   useEffect(() => {
     if (messages.length > 0) {
       localStorage.setItem("lockedin_chat_history", JSON.stringify(messages));
     }
   }, [messages]);
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
@@ -116,7 +114,6 @@ export default function Home() {
       setMessages((prev) => [...prev, { role: "assistant", text: `⏰ Heads up bestie — "${t.title}" is due ${d}!` }]);
     });
   };
-
   const fetchTasks = async () => {
     try {
       const res = await fetch(`${API_URL}/api/tasks`, { headers: { Authorization: `Bearer ${token}` } });
@@ -223,12 +220,20 @@ export default function Home() {
         body: JSON.stringify({ message: text, history: historyToSend }),
       });
       const data = await res.json();
-      setMessages((prev) => [...prev, { role: "assistant", text: data.reply || "Done!", askType: data.askType, taskOptions: data.taskOptions, subtaskProposal: data.subtaskProposal }]);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        text: data.reply || "Done!",
+        askType: data.askType,
+        taskOptions: data.taskOptions,
+        subtaskProposal: data.subtaskProposal,
+        linkedTaskId: data.showTaskId || null,
+      }]);
       if (data.tasksChanged) fetchTasks();
     } catch {
       setMessages((prev) => [...prev, { role: "assistant", text: "Hmm, something glitched. Try again?" }]);
     } finally { setChatLoading(false); }
   };
+
   const handleTaskOptionAction = async (opt, kind) => {
     if (kind === "delete") {
       await fetch(`${API_URL}/api/tasks/${opt.id}`, {
@@ -282,14 +287,15 @@ export default function Home() {
     }));
     setCustomSubtask((prev) => ({ ...prev, [msgIndex]: { title: "", priority: "medium", dueDate: "" } }));
   };
-
   const removeCustomSubtask = (msgIndex, i) => {
     setCustomAdded((prev) => ({ ...prev, [msgIndex]: (prev[msgIndex] || []).filter((_, idx) => idx !== i) }));
   };
 
-  // Confirms a chat-proposed set of subtasks. proposal = { taskId, taskTitle, subtasks }
+  // proposal = { taskId, taskTitle, priority, dueDate, subtasks }
   // If taskId exists, embed into that existing task. Otherwise create a new task
-  // from taskTitle with the picked subtasks embedded in it.
+  // from taskTitle (+ the priority/dueDate already gathered in chat) with the
+  // picked subtasks embedded. Either way, keep the resulting task's id on the
+  // message so the chat can keep showing its live, editable subtask list.
   const confirmSubtasks = async (msgIndex, proposal) => {
     const subtasks = proposal.subtasks || [];
     const state = subtaskState[msgIndex] || { checked: {}, dates: {}, priorities: {} };
@@ -311,6 +317,8 @@ export default function Home() {
     const newSubtasks = [...selected, ...custom];
     if (newSubtasks.length === 0) return;
 
+    let targetTaskId = proposal.taskId;
+
     if (proposal.taskId) {
       const task = tasks.find((t) => t._id === proposal.taskId);
       const updatedSubtasks = [...(task?.subtasks || []), ...newSubtasks];
@@ -320,14 +328,19 @@ export default function Home() {
         body: JSON.stringify({ subtasks: updatedSubtasks }),
       });
     } else {
-      await fetch(`${API_URL}/api/tasks`, {
+      const body = { title: proposal.taskTitle || "New task", subtasks: newSubtasks };
+      if (proposal.priority) body.priority = proposal.priority;
+      if (proposal.dueDate) body.dueDate = proposal.dueDate;
+      const res = await fetch(`${API_URL}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ title: proposal.taskTitle || "New task", subtasks: newSubtasks }),
+        body: JSON.stringify(body),
       });
+      const created = await res.json();
+      targetTaskId = created._id;
     }
 
-    setMessages((prev) => prev.map((m, idx) => (idx === msgIndex ? { ...m, subtaskProposal: null, subtaskDone: true } : m)));
+    setMessages((prev) => prev.map((m, idx) => (idx === msgIndex ? { ...m, subtaskProposal: null, linkedTaskId: targetTaskId } : m)));
     setCustomAdded((prev) => ({ ...prev, [msgIndex]: [] }));
     fetchTasks();
   };
@@ -338,12 +351,18 @@ export default function Home() {
     const updatedSubtasks = task.subtasks.map((st, i) =>
       i === subtaskIndex ? { ...st, completed: !st.completed } : st
     );
-    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
-    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+    const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ subtasks: updatedSubtasks }),
     });
+    if (res.ok) {
+      const saved = await res.json();
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? saved : t)));
+    } else {
+      console.error("Failed to toggle subtask");
+      fetchTasks();
+    }
   };
 
   const addSubtaskToTask = async (taskId) => {
@@ -359,26 +378,64 @@ export default function Home() {
     };
     const updatedSubtasks = [...(task.subtasks || []), newSubtask];
 
-    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
     setAddingSubtaskId(null);
     setNewSubtaskDraft({ title: "", priority: "medium", dueDate: "" });
 
-    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+    const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ subtasks: updatedSubtasks }),
     });
+    if (res.ok) {
+      const saved = await res.json();
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? saved : t)));
+    } else {
+      console.error("Failed to add subtask");
+      fetchTasks();
+    }
   };
+  const removeSubtaskFromTask = async (taskId, idx) => {
+    const task = tasks.find((t) => t._id === taskId);
+    if (!task) return;
+    const updatedSubtasks = (task.subtasks || []).filter((_, i) => i !== idx);
+
+    // Optimistic UI update so the row disappears immediately...
+    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
+
+    const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ subtasks: updatedSubtasks }),
+    });
+    if (res.ok) {
+      // ...then reconcile with whatever the server actually saved.
+      const saved = await res.json();
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? saved : t)));
+    } else {
+      console.error("Failed to delete subtask — reverting");
+      fetchTasks();
+    }
+  };
+
   const updateSubtaskField = async (taskId, idx, field, value) => {
     const task = tasks.find((t) => t._id === taskId);
     if (!task) return;
-    const updatedSubtasks = task.subtasks.map((s, i) => (i === idx ? { ...s, [field]: value } : s));
-    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
-    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+    // A cleared date input sends "" — must become null, or the save fails.
+    const cleanValue = field === "dueDate" && value === "" ? null : value;
+    const updatedSubtasks = task.subtasks.map((s, i) => (i === idx ? { ...s, [field]: cleanValue } : s));
+
+    const res = await fetch(`${API_URL}/api/tasks/${taskId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ subtasks: updatedSubtasks }),
     });
+    if (res.ok) {
+      const saved = await res.json();
+      setTasks((prev) => prev.map((t) => (t._id === taskId ? saved : t)));
+    } else {
+      console.error("Failed to update subtask field");
+      fetchTasks();
+    }
   };
 
   const fetchAiSubtasksForTask = async (task) => {
@@ -431,14 +488,19 @@ export default function Home() {
     }));
     const updatedSubtasks = [...(task.subtasks || []), ...newSubtasks];
 
-    setTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, subtasks: updatedSubtasks } : t)));
-    setAiSubtaskDraft((prev) => ({ ...prev, [task._id]: null }));
-
-    await fetch(`${API_URL}/api/tasks/${task._id}`, {
+    const res = await fetch(`${API_URL}/api/tasks/${task._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ subtasks: updatedSubtasks }),
     });
+    if (res.ok) {
+      const saved = await res.json();
+      setTasks((prev) => prev.map((t) => (t._id === task._id ? saved : t)));
+    } else {
+      console.error("Failed to add AI subtasks");
+      fetchTasks();
+    }
+    setAiSubtaskDraft((prev) => ({ ...prev, [task._id]: null }));
   };
 
   const sortedTasks = [...tasks].filter((t) => t.status !== "deleted").sort((a, b) => {
@@ -450,6 +512,35 @@ export default function Home() {
 
   const formatDate = (d) => !d ? "No due date" : new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const toInputDate = (d) => d ? new Date(d).toISOString().split("T")[0] : "";
+
+  // Reusable live, editable subtask list — used both right after confirming a
+  // chat subtask proposal, and when the user asks to review an existing task.
+  const renderLiveSubtaskList = (taskId) => {
+    const t = tasks.find((tt) => tt._id === taskId);
+    if (!t) return <p style={{ fontFamily: "Quicksand", fontSize: 13, color: "var(--text-dim)", fontStyle: "italic" }}>Added to your list! ✨</p>;
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 14, padding: 12 }}>
+        <p style={{ margin: 0, fontFamily: "Quicksand", fontWeight: 700, fontSize: 14 }}>✨ {t.title}</p>
+        {(t.subtasks || []).length === 0 && (
+          <p style={{ margin: 0, fontFamily: "Poppins", fontSize: 13, color: "var(--text-dim)" }}>No subtasks yet.</p>
+        )}
+        {(t.subtasks || []).map((st, idx) => (
+          <div key={st._id || idx} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", borderRadius: 10, padding: "6px 10px", flexWrap: "wrap" }}>
+            <input type="checkbox" checked={!!st.completed} onChange={() => toggleSubtaskCompleted(t._id, idx)} style={{ width: 16, height: 16 }} />
+            <select value={st.priority || "medium"} onChange={(e) => updateSubtaskField(t._id, idx, "priority", e.target.value)}
+              style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[st.priority || "medium"], border: "none", fontSize: 9, cursor: "pointer" }}>
+              <option value="low">LOW</option>
+              <option value="medium">MEDIUM</option>
+              <option value="high">HIGH</option>
+            </select>
+            <span style={{ flex: 1, fontFamily: "Poppins", fontSize: 13, textDecoration: st.completed ? "line-through" : "none", minWidth: 100 }}>{st.title}</span>
+            <input type="date" value={toInputDate(st.dueDate)} onChange={(e) => updateSubtaskField(t._id, idx, "dueDate", e.target.value)} style={styles.inlineSelect} />
+            <button onClick={() => removeSubtaskFromTask(t._id, idx)} style={{ ...styles.miniBtn, color: "#ff5f5f" }}>🗑️</button>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const sparklePositions = [
     { top: "10%", left: "8%" }, { top: "18%", left: "85%" }, { top: "75%", left: "12%" },
@@ -469,7 +560,6 @@ export default function Home() {
           <p style={styles.fullScreenText}>{fullScreenMsg.text}</p>
         </div>
       )}
-
       <div style={styles.mainCol}>
         <header style={styles.header}>
           <span className="wordmark" style={{ fontSize: "3rem" }}>lockedin</span>
@@ -533,6 +623,7 @@ export default function Home() {
                       {(task.priority || "medium").toUpperCase()}
                     </span>
                   )}
+
                   <span style={{ ...styles.rowTitle, textDecoration: task.status === "done" ? "line-through" : "none" }}>
                     {task.title}
                   </span>
@@ -649,15 +740,12 @@ export default function Home() {
                       </div>
                     )}
 
-                    {(!task.subtasks || task.subtasks.length === 0) && !aiSubtaskDraft[task._id] && (
-                      <button
-                        onClick={() => fetchAiSubtasksForTask(task)}
-                        style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 10, border: "1px dashed var(--primary)", background: "var(--surface-2)", color: "var(--primary-strong)", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-                      >
-                        ✨ Suggest subtasks with AI
-                      </button>
-                    )}
-
+                    <button
+                      onClick={() => fetchAiSubtasksForTask(task)}
+                      style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 10, border: "1px dashed var(--primary)", background: "var(--surface-2)", color: "var(--primary-strong)", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                    >
+                      {task.subtasks && task.subtasks.length > 0 ? "✨ Suggest more subtasks" : "✨ Suggest subtasks with AI"}
+                    </button>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: "var(--surface-2)", borderRadius: 12, padding: 10, border: "1px dashed var(--border)" }}>
                       <input
                         type="text"
@@ -801,9 +889,7 @@ export default function Home() {
                 </div>
               )}
 
-              {m.subtaskDone && (
-                <p style={{ fontFamily: "Quicksand", fontSize: 13, color: "var(--text-dim)", fontStyle: "italic" }}>Added to your list! ✨</p>
-              )}
+              {m.linkedTaskId && renderLiveSubtaskList(m.linkedTaskId)}
             </div>
           ))}
           {chatLoading && <div style={{ ...styles.chatBubble, background: "var(--surface-2)", alignSelf: "flex-start" }}>typing...</div>}
