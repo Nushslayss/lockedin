@@ -21,6 +21,8 @@ const NOT_DONE_MESSAGES = [
   "Girlie, we can circle back! Take your time! 💪",
 ];
 
+const DEFAULT_GREETING = { role: "assistant", text: "Heyyy! ✨ I'm your lockedin assistant — I can chat about anything, add tasks, split them into steps, or clear stuff out. What's up?" };
+
 export default function Home() {
   const [theme, setTheme] = useState("light");
   const [tasks, setTasks] = useState([]);
@@ -42,6 +44,7 @@ export default function Home() {
   const [expandedId, setExpandedId] = useState(null);
   const [addingSubtaskId, setAddingSubtaskId] = useState(null);
   const [newSubtaskDraft, setNewSubtaskDraft] = useState({ title: "", priority: "medium", dueDate: "" });
+  const [aiSubtaskDraft, setAiSubtaskDraft] = useState({});
   const [subtaskState, setSubtaskState] = useState({});
   const [customSubtask, setCustomSubtask] = useState({});
   const [customAdded, setCustomAdded] = useState({});
@@ -57,11 +60,30 @@ export default function Home() {
     document.documentElement.setAttribute("data-theme", savedTheme);
     if (!token) { router.push("/login"); return; }
     initialLoad();
-    setMessages([{ role: "assistant", text: "Heyyy! ✨ I'm your lockedin assistant — I can chat about anything, add tasks, split them into steps, or clear stuff out. What's up?" }]);
+
+    // Load persisted chat history so it survives reloads/navigation.
+    // Only cleared on logout (see logout()).
+    const savedChat = localStorage.getItem("lockedin_chat_history");
+    if (savedChat) {
+      try {
+        const parsedChat = JSON.parse(savedChat);
+        setMessages(Array.isArray(parsedChat) && parsedChat.length > 0 ? parsedChat : [DEFAULT_GREETING]);
+      } catch {
+        setMessages([DEFAULT_GREETING]);
+      }
+    } else {
+      setMessages([DEFAULT_GREETING]);
+    }
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Persist chat history any time it changes.
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem("lockedin_chat_history", JSON.stringify(messages));
+    }
+  }, [messages]);
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
@@ -127,10 +149,12 @@ export default function Home() {
   };
 
   const markDone = async (task) => {
+    const updatedSubtasks = (task.subtasks || []).map((s) => ({ ...s, completed: true }));
+    setTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, status: "done", subtasks: updatedSubtasks } : t)));
     await fetch(`${API_URL}/api/tasks/${task._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ status: "done", completed: true }),
+      body: JSON.stringify({ status: "done", completed: true, subtasks: updatedSubtasks }),
     });
     showFullScreen(MOTIVATIONAL_MESSAGES[Math.floor(Math.random() * MOTIVATIONAL_MESSAGES.length)], "success");
     fetchTasks();
@@ -161,8 +185,15 @@ export default function Home() {
   };
 
   const confirmReschedule = async (withDate) => {
-    const body = withDate && rescheduleDate ? { status: "pending", dueDate: rescheduleDate } : { status: "failed" };
-    await fetch(`${API_URL}/api/tasks/${rescheduleTask._id}`, {
+    const task = rescheduleTask;
+    let body;
+    if (withDate && rescheduleDate) {
+      body = { status: "pending", dueDate: rescheduleDate };
+    } else {
+      const updatedSubtasks = (task.subtasks || []).map((s) => ({ ...s, completed: false }));
+      body = { status: "failed", subtasks: updatedSubtasks };
+    }
+    await fetch(`${API_URL}/api/tasks/${task._id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -172,7 +203,11 @@ export default function Home() {
     fetchTasks();
   };
 
-  const logout = () => { localStorage.removeItem("token"); router.push("/login"); };
+  const logout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("lockedin_chat_history");
+    router.push("/login");
+  };
 
   const sendChat = async (textOverride) => {
     const text = (textOverride ?? chatInput).trim();
@@ -194,8 +229,6 @@ export default function Home() {
       setMessages((prev) => [...prev, { role: "assistant", text: "Hmm, something glitched. Try again?" }]);
     } finally { setChatLoading(false); }
   };
-
-  // ---- FIXED: handleTaskOptionAction now closes properly ----
   const handleTaskOptionAction = async (opt, kind) => {
     if (kind === "delete") {
       await fetch(`${API_URL}/api/tasks/${opt.id}`, {
@@ -212,7 +245,6 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "assistant", text: `Got it — "${opt.title}" ${kind === "delete" ? "moved to deleted" : "marked done"}! ✨` }]);
   };
 
-  // ---- FIXED: these are now proper top-level functions, not nested inside handleTaskOptionAction ----
   const toggleSubtaskCheck = (msgIndex, i) => {
     setSubtaskState((prev) => {
       const cur = prev[msgIndex] || { checked: {}, dates: {}, priorities: {} };
@@ -255,38 +287,51 @@ export default function Home() {
     setCustomAdded((prev) => ({ ...prev, [msgIndex]: (prev[msgIndex] || []).filter((_, idx) => idx !== i) }));
   };
 
-  const confirmSubtasks = async (msgIndex, subtasks) => {
+  // Confirms a chat-proposed set of subtasks. proposal = { taskId, taskTitle, subtasks }
+  // If taskId exists, embed into that existing task. Otherwise create a new task
+  // from taskTitle with the picked subtasks embedded in it.
+  const confirmSubtasks = async (msgIndex, proposal) => {
+    const subtasks = proposal.subtasks || [];
     const state = subtaskState[msgIndex] || { checked: {}, dates: {}, priorities: {} };
-    const selected = subtasks.filter((_, i) => state.checked[i]);
-    const custom = customAdded[msgIndex] || [];
-    const total = selected.length + custom.length;
-    if (total === 0) return;
+    const selected = subtasks
+      .map((title, i) => ({ title, i }))
+      .filter(({ i }) => state.checked[i])
+      .map(({ title, i }) => ({
+        title,
+        completed: false,
+        priority: state.priorities[i] || "medium",
+        dueDate: state.dates[i] || null,
+      }));
+    const custom = (customAdded[msgIndex] || []).map((item) => ({
+      title: item.title,
+      completed: false,
+      priority: item.priority,
+      dueDate: item.dueDate,
+    }));
+    const newSubtasks = [...selected, ...custom];
+    if (newSubtasks.length === 0) return;
 
-    await Promise.all([
-      ...subtasks.map((title, i) =>
-        state.checked[i]
-          ? fetch(`${API_URL}/api/tasks`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ title, priority: state.priorities[i] || "medium", dueDate: state.dates[i] || null }),
-            })
-          : null
-      ),
-      ...custom.map((item) =>
-        fetch(`${API_URL}/api/tasks`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ title: item.title, priority: item.priority, dueDate: item.dueDate }),
-        })
-      ),
-    ]);
+    if (proposal.taskId) {
+      const task = tasks.find((t) => t._id === proposal.taskId);
+      const updatedSubtasks = [...(task?.subtasks || []), ...newSubtasks];
+      await fetch(`${API_URL}/api/tasks/${proposal.taskId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ subtasks: updatedSubtasks }),
+      });
+    } else {
+      await fetch(`${API_URL}/api/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ title: proposal.taskTitle || "New task", subtasks: newSubtasks }),
+      });
+    }
 
     setMessages((prev) => prev.map((m, idx) => (idx === msgIndex ? { ...m, subtaskProposal: null, subtaskDone: true } : m)));
     setCustomAdded((prev) => ({ ...prev, [msgIndex]: [] }));
     fetchTasks();
   };
 
-  // ---- NEW: toggle a subtask's completed state inside an existing task ----
   const toggleSubtaskCompleted = async (taskId, subtaskIndex) => {
     const task = tasks.find((t) => t._id === taskId);
     if (!task) return;
@@ -300,29 +345,102 @@ export default function Home() {
       body: JSON.stringify({ subtasks: updatedSubtasks }),
     });
   };
+
   const addSubtaskToTask = async (taskId) => {
-  if (!newSubtaskDraft.title.trim()) return;
-  const task = tasks.find((t) => t._id === taskId);
-  if (!task) return;
+    if (!newSubtaskDraft.title.trim()) return;
+    const task = tasks.find((t) => t._id === taskId);
+    if (!task) return;
 
-  const newSubtask = {
-    title: newSubtaskDraft.title.trim(),
-    completed: false,
-    priority: newSubtaskDraft.priority,
-    dueDate: newSubtaskDraft.dueDate || null,
+    const newSubtask = {
+      title: newSubtaskDraft.title.trim(),
+      completed: false,
+      priority: newSubtaskDraft.priority,
+      dueDate: newSubtaskDraft.dueDate || null,
+    };
+    const updatedSubtasks = [...(task.subtasks || []), newSubtask];
+
+    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
+    setAddingSubtaskId(null);
+    setNewSubtaskDraft({ title: "", priority: "medium", dueDate: "" });
+
+    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ subtasks: updatedSubtasks }),
+    });
   };
-  const updatedSubtasks = [...(task.subtasks || []), newSubtask];
+  const updateSubtaskField = async (taskId, idx, field, value) => {
+    const task = tasks.find((t) => t._id === taskId);
+    if (!task) return;
+    const updatedSubtasks = task.subtasks.map((s, i) => (i === idx ? { ...s, [field]: value } : s));
+    setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
+    await fetch(`${API_URL}/api/tasks/${taskId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ subtasks: updatedSubtasks }),
+    });
+  };
 
-  setTasks((prev) => prev.map((t) => (t._id === taskId ? { ...t, subtasks: updatedSubtasks } : t)));
-  setAddingSubtaskId(null);
-  setNewSubtaskDraft({ title: "", priority: "medium", dueDate: "" });
+  const fetchAiSubtasksForTask = async (task) => {
+    setAiSubtaskDraft((prev) => ({ ...prev, [task._id]: { loading: true } }));
+    try {
+      const res = await fetch(`${API_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: `Break down "${task.title}" into subtasks`, history: [] }),
+      });
+      const data = await res.json();
+      const subtasks = data.subtaskProposal?.subtasks || [];
+      setAiSubtaskDraft((prev) => ({
+        ...prev,
+        [task._id]: { loading: false, subtasks, checked: {}, priorities: {}, dates: {} },
+      }));
+    } catch {
+      setAiSubtaskDraft((prev) => ({ ...prev, [task._id]: { loading: false, subtasks: [] } }));
+    }
+  };
 
-  await fetch(`${API_URL}/api/tasks/${taskId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ subtasks: updatedSubtasks }),
-  });
-};
+  const toggleAiSubtaskCheck = (taskId, idx) => {
+    setAiSubtaskDraft((prev) => {
+      const cur = prev[taskId];
+      return { ...prev, [taskId]: { ...cur, checked: { ...cur.checked, [idx]: !cur.checked[idx] } } };
+    });
+  };
+
+  const setAiSubtaskField = (taskId, idx, field, value) => {
+    setAiSubtaskDraft((prev) => {
+      const cur = prev[taskId];
+      const key = field === "priority" ? "priorities" : "dates";
+      return { ...prev, [taskId]: { ...cur, [key]: { ...cur[key], [idx]: value } } };
+    });
+  };
+
+  const confirmAiSubtasks = async (task) => {
+    const draft = aiSubtaskDraft[task._id];
+    if (!draft) return;
+    const selected = draft.subtasks
+      .map((title, idx) => ({ title, idx }))
+      .filter(({ idx }) => draft.checked[idx]);
+    if (selected.length === 0) return;
+
+    const newSubtasks = selected.map(({ title, idx }) => ({
+      title,
+      completed: false,
+      priority: draft.priorities[idx] || "medium",
+      dueDate: draft.dates[idx] || null,
+    }));
+    const updatedSubtasks = [...(task.subtasks || []), ...newSubtasks];
+
+    setTasks((prev) => prev.map((t) => (t._id === task._id ? { ...t, subtasks: updatedSubtasks } : t)));
+    setAiSubtaskDraft((prev) => ({ ...prev, [task._id]: null }));
+
+    await fetch(`${API_URL}/api/tasks/${task._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ subtasks: updatedSubtasks }),
+    });
+  };
+
   const sortedTasks = [...tasks].filter((t) => t.status !== "deleted").sort((a, b) => {
     if (!a.dueDate && !b.dueDate) return 0;
     if (!a.dueDate) return 1;
@@ -398,14 +516,12 @@ export default function Home() {
                   filter: task.status === "failed" ? "grayscale(0.6)" : "none",
                   opacity: task.status === "done" ? 0.6 : 1,
                 }}>
-                  {task.subtasks && task.subtasks.length > 0 && (
-                    <button
-                     onClick={() => setExpandedId(expandedId === task._id ? null : task._id)}
-                     style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text-dim)" }}
-                   >
-                     {expandedId === task._id ? "▼" : "▶"}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setExpandedId(expandedId === task._id ? null : task._id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--text-dim)" }}
+                  >
+                    {expandedId === task._id ? "▼" : "▶"}
+                  </button>
                   {editingId === task._id && editingField === "priority" ? (
                     <select autoFocus defaultValue={task.priority} onBlur={(e) => updateField(task._id, "priority", e.target.value)}
                       onChange={(e) => updateField(task._id, "priority", e.target.value)} style={styles.inlineSelect}>
@@ -417,7 +533,6 @@ export default function Home() {
                       {(task.priority || "medium").toUpperCase()}
                     </span>
                   )}
-
                   <span style={{ ...styles.rowTitle, textDecoration: task.status === "done" ? "line-through" : "none" }}>
                     {task.title}
                   </span>
@@ -458,54 +573,124 @@ export default function Home() {
                 </div>
 
                 {expandedId === task._id && (
-                 <div style={{ marginLeft: 30, marginTop: -6, marginBottom: 6, display: "flex", flexDirection: "column", gap: 6 }}>
-                 {task.subtasks && task.subtasks.length > 0 && task.subtasks.map((st, idx) => (
-                  <div key={st._id || idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--surface-2)", borderRadius: 10 }}>
-                   <input
-                   type="checkbox"
-                   checked={st.completed}
-                   onChange={() => toggleSubtaskCompleted(task._id, idx)}
-                   style={{ width: 16, height: 16 }}
-                  />
-                   <span style={{ fontFamily: "Poppins", fontSize: 13, textDecoration: st.completed ? "line-through" : "none" }}>
-                    {st.title}
-                  </span>
-                </div>
-             ))}
+                  <div style={{ marginLeft: 30, marginTop: -6, marginBottom: 6, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {task.subtasks && task.subtasks.length > 0 && task.subtasks.map((st, idx) => (
+                      <div key={st._id || idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--surface-2)", borderRadius: 10, flexWrap: "wrap" }}>
+                        <input
+                          type="checkbox"
+                          checked={!!st.completed}
+                          onChange={() => toggleSubtaskCompleted(task._id, idx)}
+                          style={{ width: 16, height: 16 }}
+                        />
+                        <select
+                          value={st.priority || "medium"}
+                          onChange={(e) => updateSubtaskField(task._id, idx, "priority", e.target.value)}
+                          style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[st.priority || "medium"], border: "none", fontSize: 9, cursor: "pointer" }}
+                        >
+                          <option value="low">LOW</option>
+                          <option value="medium">MEDIUM</option>
+                          <option value="high">HIGH</option>
+                        </select>
+                        <span style={{ flex: 1, fontFamily: "Poppins", fontSize: 13, textDecoration: st.completed ? "line-through" : "none", minWidth: 100 }}>
+                          {st.title}
+                        </span>
+                        <input
+                          type="date"
+                          value={toInputDate(st.dueDate)}
+                          onChange={(e) => updateSubtaskField(task._id, idx, "dueDate", e.target.value)}
+                          style={styles.inlineSelect}
+                        />
+                        <button
+                          onClick={() => toggleSubtaskCompleted(task._id, idx)}
+                          style={{
+                            ...styles.rowBtn,
+                            padding: "5px 10px",
+                            fontSize: 11,
+                            color: st.completed ? "#fff" : "var(--text-dim)",
+                            background: st.completed ? "#5fd68a" : "var(--surface)",
+                            borderColor: st.completed ? "#5fd68a" : "var(--border)",
+                          }}
+                        >
+                          ✓ Done
+                        </button>
+                        <button
+                          onClick={() => removeSubtaskFromTask(task._id, idx)}
+                          style={{ ...styles.rowBtn, padding: "5px 10px", fontSize: 11, color: "#ff5f5f" }}
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    ))}
 
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: "var(--surface-2)", borderRadius: 12, padding: 10, border: "1px dashed var(--border)" }}>
-      <input
-        type="text"
-        placeholder="Add a subtask..."
-        value={addingSubtaskId === task._id ? newSubtaskDraft.title : ""}
-        onFocus={() => setAddingSubtaskId(task._id)}
-        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, title: e.target.value })); }}
-        style={{ flex: "1 1 120px", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", fontFamily: "Poppins", fontSize: 13 }}
-      />
-      <select
-        value={addingSubtaskId === task._id ? newSubtaskDraft.priority : "medium"}
-        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, priority: e.target.value })); }}
-        style={styles.inlineSelect}
-      >
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-      <input
-        type="date"
-        value={addingSubtaskId === task._id ? newSubtaskDraft.dueDate : ""}
-        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, dueDate: e.target.value })); }}
-        style={styles.inlineSelect}
-      />
-      <button
-        onClick={() => addSubtaskToTask(task._id)}
-        style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "var(--primary)", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
-      >
-        + Add
-      </button>
-    </div>
-  </div>
-)}
+                    {aiSubtaskDraft[task._id]?.loading && (
+                      <p style={{ fontFamily: "Poppins", fontSize: 13, color: "var(--text-dim)" }}>Thinking of subtasks...</p>
+                    )}
+
+                    {aiSubtaskDraft[task._id] && !aiSubtaskDraft[task._id].loading && aiSubtaskDraft[task._id].subtasks.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--surface-2)", borderRadius: 12, padding: 10, border: "1px dashed var(--border)" }}>
+                        {aiSubtaskDraft[task._id].subtasks.map((title, idx) => {
+                          const draft = aiSubtaskDraft[task._id];
+                          const priority = draft.priorities[idx] || "medium";
+                          return (
+                            <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", borderRadius: 10, padding: "6px 10px", flexWrap: "wrap" }}>
+                              <input type="checkbox" checked={!!draft.checked[idx]} onChange={() => toggleAiSubtaskCheck(task._id, idx)} style={{ width: 16, height: 16 }} />
+                              <select value={priority} onChange={(e) => setAiSubtaskField(task._id, idx, "priority", e.target.value)}
+                                style={{ ...styles.priorityBadge, background: PRIORITY_COLOR[priority], border: "none", fontSize: 9, cursor: "pointer" }}>
+                                <option value="low">LOW</option>
+                                <option value="medium">MEDIUM</option>
+                                <option value="high">HIGH</option>
+                              </select>
+                              <span style={{ flex: 1, fontFamily: "Poppins", fontSize: 13, minWidth: 100 }}>{title}</span>
+                              <input type="date" onChange={(e) => setAiSubtaskField(task._id, idx, "dueDate", e.target.value)} style={styles.inlineSelect} />
+                            </div>
+                          );
+                        })}
+                        <button onClick={() => confirmAiSubtasks(task)} style={styles.doneBtn}>✔ Add selected</button>
+                      </div>
+                    )}
+
+                    {(!task.subtasks || task.subtasks.length === 0) && !aiSubtaskDraft[task._id] && (
+                      <button
+                        onClick={() => fetchAiSubtasksForTask(task)}
+                        style={{ alignSelf: "flex-start", padding: "8px 14px", borderRadius: 10, border: "1px dashed var(--primary)", background: "var(--surface-2)", color: "var(--primary-strong)", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                      >
+                        ✨ Suggest subtasks with AI
+                      </button>
+                    )}
+
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", background: "var(--surface-2)", borderRadius: 12, padding: 10, border: "1px dashed var(--border)" }}>
+                      <input
+                        type="text"
+                        placeholder="Add a subtask..."
+                        value={addingSubtaskId === task._id ? newSubtaskDraft.title : ""}
+                        onFocus={() => setAddingSubtaskId(task._id)}
+                        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, title: e.target.value })); }}
+                        style={{ flex: "1 1 120px", padding: "8px 12px", borderRadius: 10, border: "1px solid var(--border)", fontFamily: "Poppins", fontSize: 13 }}
+                      />
+                      <select
+                        value={addingSubtaskId === task._id ? newSubtaskDraft.priority : "medium"}
+                        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, priority: e.target.value })); }}
+                        style={styles.inlineSelect}
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                      <input
+                        type="date"
+                        value={addingSubtaskId === task._id ? newSubtaskDraft.dueDate : ""}
+                        onChange={(e) => { setAddingSubtaskId(task._id); setNewSubtaskDraft((prev) => ({ ...prev, dueDate: e.target.value })); }}
+                        style={styles.inlineSelect}
+                      />
+                      <button
+                        onClick={() => addSubtaskToTask(task._id)}
+                        style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "var(--primary)", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}
+                      >
+                        + Add
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -525,6 +710,13 @@ export default function Home() {
                   {["Low", "Medium", "High"].map((p) => (
                     <button key={p} onClick={() => sendChat(p)} style={styles.pillBtn}>{p}</button>
                   ))}
+                </div>
+              )}
+
+              {m.askType === "splitChoice" && (
+                <div style={styles.pillRow}>
+                  <button onClick={() => sendChat("Yes, split it into subtasks")} style={styles.pillBtn}>Yes, split it up</button>
+                  <button onClick={() => sendChat("No, keep it as one task")} style={styles.pillBtn}>No, one task</button>
                 </div>
               )}
 
@@ -603,7 +795,7 @@ export default function Home() {
                     <button onClick={() => addCustomSubtaskToList(i)} style={{ padding: "8px 14px", borderRadius: 10, border: "none", background: "var(--primary)", color: "#fff", fontFamily: "Quicksand", fontWeight: 700, fontSize: 13, cursor: "pointer" }}>+ Add</button>
                   </div>
 
-                  <button onClick={() => confirmSubtasks(i, m.subtaskProposal.subtasks)} style={styles.doneBtn}>
+                  <button onClick={() => confirmSubtasks(i, m.subtaskProposal)} style={styles.doneBtn}>
                     ✔ Done — Add Selected
                   </button>
                 </div>
@@ -704,4 +896,4 @@ const styles = {
     lineHeight: 1.4, maxWidth: 700, position: "relative", zIndex: 1,
     textShadow: "0 4px 20px rgba(0,0,0,0.2)",
   },
-}; 
+};

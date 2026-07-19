@@ -10,7 +10,7 @@ router.post("/", authenticate, async (req, res) => {
     const { message, history } = req.body;
     if (!message) return res.status(400).json({ error: "Message required" });
 
-    const tasks = await Task.find({ userId: req.userId }).sort({ createdAt: -1 });
+    const tasks = await Task.find({ userId: req.userId, status: { $ne: "deleted" } }).sort({ createdAt: -1 });
     const taskSummary = tasks.map((t) => ({
       id: t._id.toString(),
       title: t.title,
@@ -36,13 +36,19 @@ Respond ONLY with valid JSON, no extra text, in this exact shape:
   "priority": "low" | "medium" | "high" | null,
   "dueDate": "YYYY-MM-DD" | null,
   "subtasks": ["step1","step2","step3"] or null,
-  "askType": "priority" | "date" | null,
+  "askType": "priority" | "date" | "splitChoice" | null,
   "taskOptions": [{"id":"...","title":"...","priority":"...","dueDate":"..."}] or null
 }
 
 HOW TO TALK:
 - Sound like a real person having a conversation, not a form. Vary your phrasing naturally, react to what they actually said, ask follow-ups when genuinely curious. Warm and a little upbeat, but never robotic or repetitive.
 - If the message isn't about tasks (a question, chat, translation, advice, general knowledge), just respond naturally and helpfully. action:"none", askType:null, taskOptions:null, subtasks:null.
+
+CHECKING IF A TASK NEEDS SUBTASKS:
+- If the user names a task that sounds like a big/multi-step goal (e.g. "plan a wedding", "study for exams", "launch a website"), first ask: "Want me to split this into subtasks, or keep it as one task?" Set askType:"splitChoice", action:"none", taskTitle:"<the goal name>".
+- If they reply "yes"/"split it up", generate 4-8 concrete subtasks immediately. Set askType:null, action:"create", taskTitle:"<the goal>", and fill subtasks with the array. Also ask for priority/date for the PARENT task only if not already known.
+- If they reply "no"/"keep it one task", continue the normal single-task flow (ask priority, then date).
+- For small single-step tasks (e.g. "call mom"), skip this question — go straight to asking priority.
 
 CREATING A TASK:
 - When the user names something they want to do, first ask for priority conversationally. Set askType:"priority". action:"none".
@@ -88,37 +94,30 @@ GENERAL RULE: never ask more than one question per turn, and never repeat someth
     }
 
     let tasksChanged = false;
+    let createdTaskId = null;
     let subtaskProposal = null;
 
+    // Create the parent task. Subtasks are NEVER embedded automatically here —
+    // they only get attached once the user picks them in the UI.
     if (parsed.action === "create" && parsed.taskTitle) {
       const task = new Task({
         userId: req.userId,
         title: parsed.taskTitle,
         priority: ["low", "medium", "high"].includes(parsed.priority) ? parsed.priority : "medium",
         dueDate: parsed.dueDate || null,
+        subtasks: [],
       });
       await task.save();
       tasksChanged = true;
+      createdTaskId = task._id.toString();
     }
-    if (parsed.action === "create" && parsed.taskTitle && Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
-  const task = new Task({
-    userId: req.userId,
-    title: parsed.taskTitle,
-    priority: ["low", "medium", "high"].includes(parsed.priority) ? parsed.priority : "medium",
-    dueDate: parsed.dueDate || null,
-    subtasks: parsed.subtasks.map((title) => ({ title, completed: false })),
-  });
-  await task.save();
-  tasksChanged = true;
-}
 
     if (parsed.action === "delete" && parsed.taskId) {
-      await Task.findOneAndDelete({ _id: parsed.taskId, userId: req.userId });
+      await Task.findOneAndUpdate(
+        { _id: parsed.taskId, userId: req.userId },
+        { status: "deleted", deletedAt: new Date() }
+      );
       tasksChanged = true;
-    }
-
-    if (Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
-      subtaskProposal = { subtasks: parsed.subtasks };
     }
 
     if (parsed.action === "complete" && parsed.taskId) {
@@ -126,9 +125,24 @@ GENERAL RULE: never ask more than one question per turn, and never repeat someth
       if (task) {
         task.status = "done";
         task.completed = true;
+        if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach((s) => (s.completed = true));
+        }
         await task.save();
         tasksChanged = true;
       }
+    }
+
+    // If the AI proposed subtasks, send them back as a PROPOSAL only — the
+    // frontend shows checkboxes and the user decides which ones actually get saved.
+    // taskId tells the frontend WHICH task to embed them into (fixes subtasks
+    // leaking out as separate top-level tasks).
+    if (Array.isArray(parsed.subtasks) && parsed.subtasks.length > 0) {
+      subtaskProposal = {
+        taskId: createdTaskId || parsed.taskId || null,
+        taskTitle: parsed.taskTitle || null,
+        subtasks: parsed.subtasks,
+      };
     }
 
     res.json({
