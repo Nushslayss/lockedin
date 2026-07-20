@@ -18,15 +18,13 @@ export default function DeletedTasks() {
 
   const fetchDeleted = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/tasks`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/tasks/deleted`, { headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
-      const list = Array.isArray(data) ? data.filter((t) => t.status === "deleted") : [];
-      setTasks(list);
+      setTasks(Array.isArray(data) ? data : []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   };
 
-  // Restore with the task's existing date, no changes
   const restoreTask = async (id) => {
     setTasks((prev) => prev.filter((t) => t._id !== id));
     await fetch(`${API_URL}/api/tasks/${id}`, {
@@ -36,7 +34,6 @@ export default function DeletedTasks() {
     });
   };
 
-  // Restore AND push to a new due date at the same time
   const rescheduleAndRestore = async (id, newDate) => {
     setTasks((prev) => prev.filter((t) => t._id !== id));
     setReschedulingId(null);
@@ -49,7 +46,7 @@ export default function DeletedTasks() {
 
   const permanentDelete = async (id) => {
     setTasks((prev) => prev.filter((t) => t._id !== id));
-    await fetch(`${API_URL}/api/tasks/${id}`, {
+    await fetch(`${API_URL}/api/tasks/${id}/permanent`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

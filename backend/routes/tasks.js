@@ -5,8 +5,6 @@ import { analyzeTask } from "../utils/aiAgent.js";
 
 const router = express.Router();
 
-// Converts any "" (empty string) dueDate to null so Mongoose never tries to
-// cast an empty string into a Date and blow up the whole save.
 function sanitizeSubtasks(subtasks) {
   if (!Array.isArray(subtasks)) return subtasks;
   return subtasks.map((s) => ({
@@ -134,9 +132,23 @@ router.patch("/:id", authenticate, async (req, res) => {
 
 router.delete("/:id", authenticate, async (req, res) => {
   try {
-    const task = await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    const task = await Task.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { status: "deleted", deletedAt: new Date() },
+      { new: true }
+    );
     if (!task) return res.status(404).json({ error: "Task not found" });
-    res.json({ message: "Task deleted" });
+    res.json({ message: "Task moved to deleted", task });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/:id/permanent", authenticate, async (req, res) => {
+  try {
+    const task = await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId, status: "deleted" });
+    if (!task) return res.status(404).json({ error: "Task not found" });
+    res.json({ message: "Task permanently deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
