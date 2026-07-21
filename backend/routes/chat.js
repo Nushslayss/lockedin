@@ -101,7 +101,30 @@ GENERAL RULE: never ask more than one question per turn, never repeat something 
       { role: "user", content: message },
     ];
 
-    let parsed = await getValidJson(groq, baseMessages);
+    let parsed;
+    try {
+      parsed = await getValidJson(groq, baseMessages);
+    } catch (err) {
+      // Groq daily/rate limit hit — show a clean message instead of crashing
+      if (err.status === 429 || (err.message && err.message.includes("rate_limit_exceeded"))) {
+        let waitMinutes = null;
+        const match = err.message.match(/try again in ([\d.]+)m/);
+        if (match) waitMinutes = Math.ceil(parseFloat(match[1]));
+
+        return res.json({
+          reply: waitMinutes
+            ? `I've hit my AI usage limit for now — it'll reset in about ${waitMinutes} minute${waitMinutes === 1 ? "" : "s"}. Please try again shortly!`
+            : "I've hit my AI usage limit for now. Please try again in a little while.",
+          tasksChanged: false,
+          askType: null,
+          taskOptions: null,
+          subtaskProposal: null,
+          showTaskId: null,
+        });
+      }
+      console.error("Chat error:", err.message);
+      return res.status(500).json({ error: err.message });
+    }
 
     if (!parsed) {
       return res.json({
@@ -192,6 +215,8 @@ GENERAL RULE: never ask more than one question per turn, never repeat something 
 // stricter corrective nudge before giving up. NOTE: deliberately NOT using
 // response_format:{type:"json_object"} here — that parameter caused the API
 // call itself to fail outright on this model, which made things worse.
+// If a rate-limit error comes back, it's thrown immediately (no point retrying
+// a call that's guaranteed to fail again instantly) so the caller can handle it.
 async function getValidJson(groq, baseMessages) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const messages = attempt === 0
@@ -216,6 +241,9 @@ async function getValidJson(groq, baseMessages) {
       const parsed = safeParseFirstJsonObject(cleaned);
       if (parsed) return parsed;
     } catch (err) {
+      if (err.status === 429 || (err.message && err.message.includes("rate_limit_exceeded"))) {
+        throw err;
+      }
       console.error(`getValidJson attempt ${attempt} failed:`, err.message);
     }
   }
