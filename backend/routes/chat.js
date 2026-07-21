@@ -95,23 +95,17 @@ GENERAL RULE: never ask more than one question per turn, never repeat something 
       ? history.filter((m) => m.role === "user" || m.role === "assistant").slice(-16).map((m) => ({ role: m.role, content: m.text }))
       : [];
 
-    const completion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...historyMessages,
-        { role: "user", content: message },
-      ],
-      temperature: 0.6,
-    });
+    const baseMessages = [
+      { role: "system", content: systemPrompt },
+      ...historyMessages,
+      { role: "user", content: message },
+    ];
 
-    const raw = completion.choices[0].message.content.trim();
-    const cleaned = raw.replace(/```json|```/g, "").trim();
+    let parsed = await getValidJson(groq, baseMessages);
 
-    let parsed = safeParseFirstJsonObject(cleaned);
     if (!parsed) {
       return res.json({
-        reply: "Sorry, could you say that again?",
+        reply: "Hmm, let me try that again — could you repeat what you just said?",
         tasksChanged: false,
       });
     }
@@ -193,6 +187,40 @@ GENERAL RULE: never ask more than one question per turn, never repeat something 
     res.status(500).json({ error: err.message });
   }
 });
+
+// Calls the model, and if the response isn't valid JSON, retries ONCE with a
+// stricter corrective nudge before giving up. This absorbs the occasional
+// malformed-output glitch instead of surfacing "sorry, try again" to the user.
+async function getValidJson(groq, baseMessages) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const messages = attempt === 0
+      ? baseMessages
+      : [
+          ...baseMessages,
+          {
+            role: "system",
+            content: "Your previous response was not valid JSON. Respond again with EXACTLY ONE valid JSON object matching the required shape — no explanation, no extra text, no markdown formatting, just the raw JSON object.",
+          },
+        ];
+
+    try {
+      const completion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages,
+        temperature: 0.4,
+        response_format: { type: "json_object" },
+      });
+
+      const raw = completion.choices[0].message.content.trim();
+      const cleaned = raw.replace(/```json|```/g, "").trim();
+      const parsed = safeParseFirstJsonObject(cleaned);
+      if (parsed) return parsed;
+    } catch (err) {
+      console.error(`getValidJson attempt ${attempt} failed:`, err.message);
+    }
+  }
+  return null;
+}
 
 function safeParseFirstJsonObject(text) {
   const start = text.indexOf("{");
