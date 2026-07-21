@@ -189,8 +189,9 @@ GENERAL RULE: never ask more than one question per turn, never repeat something 
 });
 
 // Calls the model, and if the response isn't valid JSON, retries ONCE with a
-// stricter corrective nudge before giving up. This absorbs the occasional
-// malformed-output glitch instead of surfacing "sorry, try again" to the user.
+// stricter corrective nudge before giving up. NOTE: deliberately NOT using
+// response_format:{type:"json_object"} here — that parameter caused the API
+// call itself to fail outright on this model, which made things worse.
 async function getValidJson(groq, baseMessages) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const messages = attempt === 0
@@ -199,7 +200,7 @@ async function getValidJson(groq, baseMessages) {
           ...baseMessages,
           {
             role: "system",
-            content: "Your previous response was not valid JSON. Respond again with EXACTLY ONE valid JSON object matching the required shape — no explanation, no extra text, no markdown formatting, just the raw JSON object.",
+            content: "Your previous response was not valid JSON. Respond again with EXACTLY ONE valid JSON object matching the required shape — no explanation, no extra text, no markdown formatting, just the raw JSON object starting with { and ending with }.",
           },
         ];
 
@@ -208,7 +209,6 @@ async function getValidJson(groq, baseMessages) {
         model: "llama-3.3-70b-versatile",
         messages,
         temperature: 0.4,
-        response_format: { type: "json_object" },
       });
 
       const raw = completion.choices[0].message.content.trim();
